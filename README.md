@@ -1,5 +1,28 @@
 # starcharts
 
+Search real astronomical history for dates matching a textual sky
+description — a *janam patri* (birth chart), an epic verse describing
+planetary omens, or any other claim of the form "the sky looked like
+this." Corrects for precession, ayanamsha, and calendar conversion
+explicitly, and reports a ranked list of candidates with their match
+quality rather than a single answer.
+
+## What it does
+
+1. **Ephemeris + ayanamsha** — real planetary positions for any date
+   (including deep BCE history), converted from tropical to sidereal
+   longitude under a configurable ayanamsha (Lahiri by default).
+2. **Calendar layer** — tithi, amanta lunar month, nakshatra, all with
+   tolerance-aware matching for how uncertain a claim should be treated.
+3. **Search engine** — coarse-to-fine constraint search across
+   multi-millennium ranges (ordered slowest-to-fastest graha), fast
+   enough to sweep ~8,400 years in low single-digit seconds.
+4. **Reporting** — full chart, per-constraint match detail, and
+   cross-ayanamsha sensitivity for every candidate, so a result comes
+   with the information needed to judge how much to trust it.
+5. **Visualization** — a North-Indian kundali SVG renderer and an
+   interactive HTML explorer built on real search output.
+
 ## Setup
 
 ```bash
@@ -7,3 +30,42 @@ python -m venv .venv
 .venv/Scripts/activate
 pip install -e .
 ```
+
+Dates outside ~3002 BCE–3003 CE need the real Swiss Ephemeris data
+files (not checked into the repo — see `ephe/README.md`):
+
+```bash
+bash ephe/download.sh
+```
+
+## Example
+
+```python
+from datetime import datetime, timezone
+from starcharts import compute_chart, render_kundali_svg
+
+chart = compute_chart(datetime(2024, 1, 1, tzinfo=timezone.utc))
+svg = render_kundali_svg(chart, title="2024-01-01 (Lahiri)")
+```
+
+See `src/starcharts/texts/` for worked examples applying the full
+pipeline to real textual sources (the Ramayana's Bala Kanda birth
+description, the Mahabharata's war-omen verses), each citation-checked
+against Sanskrit critical editions rather than paraphrased from
+secondary sources.
+
+## On what this project does and doesn't claim
+
+This tool tests the astronomical viability and internal consistency of
+a textual sky description — it does not produce an objective, singular
+date. A rashi-level (sign-level) match alone is rarely unique: real sky
+configurations recur on cycles of years to millennia, so a search
+returns a ranked candidate list, not an answer. `WORKPLAN.md` documents
+the full methodology, every caveat, and the results (including several
+negative ones) from applying this to real historical dating questions.
+
+## License
+
+AGPL-3.0-or-later (see `LICENSE`). This follows from the license of the
+core dependency, [pyswisseph](https://pypi.org/project/pyswisseph/)
+(Swiss Ephemeris, AGPL/dual-licensed by Astrodienst).

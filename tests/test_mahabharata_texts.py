@@ -35,10 +35,9 @@ def test_war_omen_profile_bhishma_parva_builds_without_error():
 
 def test_war_omen_profile_bhishma_parva_is_rare_and_misses_all_four_candidates():
     # Sanskrit-verified encoding (06,003.013c-d): Mars retrograde is part
-    # of the same clause as Mars-in-Magha, not optional -- requiring it
-    # makes this even rarer than the earlier (wrong) no-retrograde
-    # reading: just 1 epoch in ~8400 years, still nowhere near any of
-    # the four externally-proposed candidate years.
+    # of the same clause as Mars-in-Magha, not optional. Just 1 epoch in
+    # ~8400 years, nowhere near any of the four externally-proposed
+    # candidate years.
     matches = search(
         war_omen_profile_bhishma_parva(-5399, 3000, tolerance_degrees=2.0, include_node_at_jyeshtha=False)
     )
@@ -78,11 +77,9 @@ def test_war_omen_profile_udyoga_parva_builds_without_error():
 
 def test_war_omen_profile_udyoga_parva_is_rare_and_misses_all_four_candidates():
     # Sanskrit-verified (5.141.8): "kṛtvā ca aṅgārakaḥ vakraṃ jyeṣṭhāyāṃ"
-    # -- Mars retrograde IS required, not optional as an earlier
-    # (pre-Sanskrit-check) version of this function had it. With that
-    # fix, this drops from 159 loose epochs to 11 tightly-spaced ones
-    # (~442 years apart) -- none within 300 years of any of the four
-    # externally-proposed candidate years.
+    # -- Mars retrograde is required, not optional. 11 tightly-spaced
+    # epochs (~442 years apart), none within 300 years of any of the
+    # four externally-proposed candidate years.
     matches = search(war_omen_profile_udyoga_parva(-5399, 3000, tolerance_degrees=2.0))
     perfect = sorted([m for m in matches if m.score > 0.99], key=lambda m: m.jd_ut)
     epochs = []
@@ -100,8 +97,8 @@ def test_war_omen_profile_udyoga_parva_is_rare_and_misses_all_four_candidates():
 def test_mars_circuitous_variant_is_extremely_rare_and_misses_all_four_candidates():
     # Sanskrit-verified (06,003.017a): a full Mars retrograde loop at
     # Shravana is a textually distinct moment from 013c's Mars-in-Magha.
-    # Extremely rare (checked previously: 1 epoch in ~8400 years) and
-    # doesn't land near any candidate.
+    # Extremely rare (1 epoch in ~8400 years) and doesn't land near any
+    # candidate.
     matches = search(war_omen_profile_bhishma_parva_mars_circuitous_variant(-5399, 3000, tolerance_degrees=2.0))
     perfect = [m for m in matches if m.score > 0.99]
     assert len(perfect) > 0

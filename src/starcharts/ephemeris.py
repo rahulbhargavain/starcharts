@@ -8,12 +8,9 @@ For dates outside that range, this module automatically falls back to
 the full Swiss Ephemeris data files (SEFLG_SWIEPH) in EPHE_DIR
 (<project root>/ephe). Those files must be downloaded separately -- they
 aren't checked into the repo (see ephe/README.md) -- and only cover
-whatever span was actually downloaded. As of this session that's
-~5400 BCE to ~2400 BCE (via seplm30/36/42/48/54.se1 + semom equivalents,
-from the public Swiss Ephemeris GitHub repo), which combined with
-Moshier's native range gives continuous real-ephemeris coverage from
-~5400 BCE through ~3003 CE. Reaching further back needs more files of
-the same kind (the naming convention is documented in ephe/README.md).
+whatever span has actually been fetched. Reaching further back in time
+just means downloading more files of the same kind (see ephe/README.md
+for the naming convention and a ready-made download script).
 """
 
 from dataclasses import dataclass

@@ -4,34 +4,30 @@ sky at Rama's birth, encoded as search constraints.
 TEXT CAVEAT: the verse numbering (commonly cited as approximately Sarga
 18, verses 8-10) and exact wording both vary across editions (e.g. the
 Baroda critical edition vs. the widely circulated Gita Press text) and
-across translators. What follows is a paraphrase of the content that is
-consistent across the versions I'm aware of, not a verbatim quotation of
-any single edition or translation -- treat the *substance* as reasonably
-well attested, and the precise verse numbers as approximate.
+across translators. What follows is a paraphrase of content that is
+consistent across the versions surveyed, not a verbatim quotation of any
+single edition or translation -- treat the *substance* as reasonably
+well attested and the precise verse numbers as approximate.
 
-The content, paraphrased: Rama was born on the ninth day (Navami) of the
+Paraphrased content: Rama was born on the ninth day (Navami) of the
 bright half (Shukla paksha) of the month of Chaitra, with the Moon in
 Punarvasu nakshatra. At that moment, five grahas were each in their sign
 of exaltation -- Surya in Mesha, Mangala in Makara, Shani in Tula, Guru
 in Karka, and Shukra in Meena -- while the Moon was in its own sign,
 Karka, and the ascendant (Lagna) was also Karka.
 
-CONSTRAINT-SET CAVEATS (see WORKPLAN.md for the fuller versions):
+CONSTRAINT-SET NOTES (see WORKPLAN.md for the fuller discussion):
 - This is six simultaneous graha-rashi constraints plus a Moon nakshatra,
   a tithi, and a Lagna -- an extremely tight conjunction. That tightness
   is exactly why this configuration gets used for dating attempts: it is
   rare enough that if it's found at all, it's a strong candidate. It's
-  also why zero candidates in the currently searchable range wouldn't be
-  surprising -- see below.
-- The Moshier ephemeris this project currently runs on on only covers
-  ~3002 BCE to ~3003 CE. The traditionally-cited date for this
-  configuration (~5114 BCE, per Pushkar Bhatnagar's planetarium-based
-  analysis) is OUTSIDE that range. A search here can only either (a)
-  find a different, closer candidate that also happens to satisfy the
-  configuration, or (b) come up empty within range -- neither confirms
-  nor refutes the traditional date. Reaching 5114 BCE needs the
-  ephemeris swap already tracked in WORKPLAN.md (openephem + DE441, or
-  full Swiss Ephemeris data files).
+  also why an empty result in a given search range isn't surprising on
+  its own.
+- The Moshier ephemeris model covers only ~3002 BCE to ~3003 CE; the
+  full Swiss Ephemeris data files in ephe/ extend real coverage further
+  back (see ephemeris.py). A search that comes up empty within whatever
+  range is currently reachable neither confirms nor refutes a
+  traditionally-cited date outside that range.
 - Masa (Chaitra) is corroborating evidence only, not a hard filter --
   see calendar.py's module caveat on pre-500 CE intercalation anachronism.
 - Lagna is checked separately from the graha/tithi search, at local noon
@@ -40,17 +36,15 @@ CONSTRAINT-SET CAVEATS (see WORKPLAN.md for the fuller versions):
   scan -- see ascendant.py's module docstring. It is NOT part of the
   SearchProfile this module builds; check it with lagna_matches_at_noon()
   on whatever candidate dates the graha/tithi search returns.
-- CORRECTION (2026-09-19, previously said this was weak/independent
-  corroboration -- that was wrong): at local noon the Sun sits at the
-  Midheaven by definition, and at Ayodhya's latitude the Ascendant runs
-  roughly 93-95 degrees ahead of the Midheaven (verified by direct
-  computation, not the flat 90 degrees a simple model assumes). So
-  whenever Surya-in-Mesha already holds at noon, Karka-lagna follows
-  from it almost automatically at this latitude -- it is NOT independent
-  evidence once Surya-in-Mesha is already required. Still worth checking
-  (it can fail near Mesha's far edge, since the true MC-Asc offset isn't
-  exactly 90 degrees), but don't count it as adding real discriminating
-  power on top of the Surya constraint.
+- Lagna is not independent evidence once Surya-in-Mesha already holds:
+  at local noon the Sun sits at the Midheaven by definition, and at
+  Ayodhya's latitude the Ascendant runs roughly 93-95 degrees ahead of
+  the Midheaven (by direct computation, not the flat 90 degrees a
+  simplified model would assume). So whenever Surya-in-Mesha holds at
+  noon, Karka-lagna follows from it almost automatically at this
+  latitude. Still worth checking -- it can fail near Mesha's far edge,
+  since the true MC-Asc offset isn't exactly 90 degrees -- but it adds
+  little discriminating power on top of the Surya constraint alone.
 """
 
 from starcharts.ascendant import ascendant_position, local_noon_jd_ut
@@ -83,12 +77,11 @@ def bala_kanda_birth_profile(
     near-misses as ranked (lower-scoring) candidates instead of nothing.
 
     require_surya_exalted=False drops the Surya-in-Mesha constraint. The
-    root shloka's exact wording on which five grahas are meant is a
-    genuinely open textual question I can't resolve from here (raised in
-    external review, unverified against a primary source) -- if Surya
+    root shloka's exact wording on which five grahas are meant is an open
+    textual question, unverified against a primary source -- if Surya
     isn't one of the intended five, this constraint is an interpretive
-    addition, not part of the verse itself, and dropping it is worth
-    testing on its own merits regardless of how that question resolves.
+    addition rather than part of the verse itself, and dropping it is
+    worth testing on its own merits regardless of how that resolves.
     """
     constraints = [
         RashiConstraint("Mangala", _MAKARA, tolerance_degrees),
