@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.env
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.idea/
+.vscode/
+
+# Swiss Ephemeris data files (.se1): binary, fetched on demand by
+# ephe/download.sh, not committed -- see ephe/README.md.
+ephe/*.se1
