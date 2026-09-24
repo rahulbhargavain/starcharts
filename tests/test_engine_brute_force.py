@@ -316,3 +316,41 @@ def test_bala_kanda_best_fit_is_found_at_five_degrees():
     satisfied = [m for m in search(profile) if _satisfied(profile, m.jd_ut)]
     assert satisfied
     assert {swe.revjul(m.jd_ut, swe.GREG_CAL)[:2] for m in satisfied} == {(-5114, 1)}
+
+
+@needs_data_files
+def test_bala_kanda_best_fit_is_insensitive_to_delta_t():
+    """ΔT shifts when (in UT) the configuration occurs, not how closely it
+    fits: the worst miss at the best instant is the same for ΔT ±12 h,
+    while the best instant itself moves by the same 12 hours."""
+    from starcharts import ephemeris
+    from starcharts.texts.ramayana import bala_kanda_birth_profile
+
+    profile = bala_kanda_birth_profile(-5114, -5114, tolerance_degrees=0.0)
+    start = swe.julday(-5114, 1, 8, 0.0, swe.GREG_CAL)
+
+    def best_fit():
+        ephemeris._sidereal_cached.cache_clear()
+        samples = (start + k / 96 for k in range(4 * 96))  # 4 days at 15 minutes
+        return min(
+            (max(max(0.0, -c.margin(jd, DEFAULT_AYANAMSHA)[0]) for c in profile.constraints), jd)
+            for jd in samples
+        )
+
+    automatic = getattr(swe, "DELTAT_AUTOMATIC", -1e-10)
+    ephemeris.ensure_thread_ready()
+    try:
+        swe.set_delta_t_userdef(automatic)
+        base = swe.deltat(start)
+        results = {}
+        for offset_hours in (-12, 0, 12):
+            swe.set_delta_t_userdef(base + offset_hours / 24)
+            results[offset_hours] = best_fit()
+    finally:
+        swe.set_delta_t_userdef(automatic)
+        ephemeris._sidereal_cached.cache_clear()
+
+    misses = [miss for miss, _jd in results.values()]
+    assert max(misses) - min(misses) < 0.1
+    assert 4.5 < misses[0] < 4.8
+    assert results[-12][1] - results[12][1] == pytest.approx(1.0, abs=1 / 48)  # 24 h apart

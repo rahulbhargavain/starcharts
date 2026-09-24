@@ -20,7 +20,7 @@ Calendar dates are proleptic Gregorian.
 
 - **All five layers are built and tested**: ephemeris, ayanamsha
   conversion, luni-solar calendar, constraint search, and reporting, plus
-  an SVG kundali renderer and an interactive demo. 117 tests pass (with the
+  an SVG kundali renderer and an interactive demo. 118 tests pass (with the
   ephemeris data files downloaded; see `ephe/README.md`), and CI runs them
   with and without the data files.
 - **The search engine is checked against brute force.** It can no longer
@@ -30,9 +30,10 @@ Calendar dates are proleptic Gregorian.
   text occur rarely, and none of them occurs within 100 years of the four
   popularly debated war years (3137, 3067, 2449 and 1478 BCE).
 - **Ramayana (Rama's birth)**: the configuration never occurs exactly in
-  5400 BCE–3000 CE. Its closest approach, missing by 4.7° at worst, is
-  9 January of astronomical year −5114, which lines up with the
-  traditionally cited "10 January 5114 BCE".
+  5400 BCE–3000 CE. Its closest approach, missing by 4.6° at worst, is
+  10 January of astronomical year −5114 (just after midnight, Ayodhya local
+  time), which lines up with the traditionally cited "10 January 5114 BCE".
+  The miss doesn't depend on ΔT or the lunar tidal acceleration.
 
 ## Findings
 
@@ -105,10 +106,11 @@ Ayodhya).
 
 - **No exact match anywhere in 5400 BCE–3000 CE**, at 1.5° or 3°
   tolerance.
-- **The closest approach is 9 January, astronomical year −5114**
-  (5115 BCE). Five of the six sign placements hold exactly. Shani is 1.4°
-  short of Tula, and the Moon and tithi each miss by about 4.6°, which is
-  about nine hours of lunar motion. The best instant misses by 4.65° at
+- **The closest approach is 10 January, astronomical year −5114**
+  (5115 BCE), at about 00:32 Ayodhya local mean time (9 January ~19:00 UT)
+  with Swiss Ephemeris' default ΔT. Five of the six sign placements hold
+  exactly. Shani is 1.4° short of Tula, and the Moon's nakshatra and the
+  tithi each miss by about 4.6°. The best instant misses by 4.6° at
   worst, so it appears once the tolerance reaches 5°. Karka lagna holds at
   local noon. Seven or eight of eight ayanamsha choices keep every
   constraint within 8°.
@@ -118,14 +120,27 @@ Ayodhya).
   numbering) fits badly. The cited year therefore most likely uses
   astronomical numbering, as planetarium software does. That should be
   confirmed against the original source.
+- **ΔT and the Moon's tidal acceleration don't close the gap.** Re-run
+  with ΔT (43.3 h by default at this date) shifted by ±3, ±6, ±12 and
+  ±24 hours, and with the lunar tidal acceleration anywhere from −22 to
+  −28″/cy² (bracketing DE200 through DE431), the worst miss stays at
+  4.61° every time. ΔT only moves *when*, in civil time, the geometry
+  occurs: the best instant drifts from 9 January midday (ΔT +12 h) to
+  10 January midday (ΔT −12 h), and stays within 9 Jan 21:46 – 10 Jan
+  05:21 across the tidal-acceleration range. Karka lagna at noon holds in
+  every case.
+- **At the traditional birth time, local noon**, the fit is worse: with
+  default ΔT the worst miss at noon on 10 January is 11.3° (the Moon has
+  not yet reached Punarvasu). It comes back to ~4.9° only if ΔT is about
+  12 hours smaller than the default.
 - **How to read it.** This is a near-fit, not a match at the tolerances used
-  elsewhere in this project. The two constraints that miss most are both
-  lunar, and 7,100 years back the Moon's computed position is the least
-  certain quantity: a few hours' error in ΔT moves it by a few degrees.
-  Whether a 4.7° miss counts depends on how much lunar uncertainty one
-  grants at that depth. It is the closest the sky comes in 8,400 years, and
-  much closer than this document previously reported (see the 2026-09-24
-  log entry).
+  elsewhere in this project, and the usual lunar-uncertainty argument
+  doesn't rescue it. The geometric miss is insensitive to ΔT and tidal
+  acceleration, and the tithi miss (a Moon-minus-Sun angle) is
+  independent of ayanamsha too. What remains open is whether the verse
+  intends this level of precision. It is the closest the sky comes in
+  8,400 years, and much closer than this document previously reported
+  (see the 2026-09-24 log entries).
 - **At 8° tolerance** four epochs appear: 5115, 4498 and 3644 BCE and
   2810 CE. 5115 BCE is the closest fit.
 - **If Surya is not among the five** (an external suggestion about which
@@ -260,8 +275,9 @@ external rather than by shape tests:
 
 - **Bala Kanda near-fit**:
   - check which calendar and year numbering Bhatnagar used;
-  - rerun under explicit ΔT variants to see whether plausible lunar
-    uncertainty 7,100 years back closes the ~4.7° gap;
+  - check whether the published ΔT uncertainty at ~5100 BCE allows the
+    ~12-hour shift that would put the best fit at local noon (the
+    geometric miss itself is ΔT-independent; see *Findings*);
   - settle the verse wording (whether Surya is among the five exalted
     grahas).
 - **Udyoga 1299 BCE** (within tolerance, 179 years from 1478 BCE): inspect
@@ -372,3 +388,8 @@ the path to each current finding stays checkable.
   cached ephemeris lookups for scoring, SVG title escaping, CI (lint, and
   tests with and without the data files), and tests that skip cleanly
   without the data files.
+- **Re-ran the Bala Kanda fit under ΔT and tidal-acceleration variants.**
+  The 4.61° worst miss is unchanged by either; only the date and hour of
+  the best fit move. With default ΔT it is 10 January (Ayodhya local
+  time), not 9 January as first written (that was UT). Corrected the
+  earlier suggestion that ΔT uncertainty might close the gap: it can't.
