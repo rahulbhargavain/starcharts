@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from starcharts.arcs import arc_matches, arc_score
+from starcharts.arcs import arc_margin, arc_matches, arc_score
 from starcharts.constants import (
     NAKSHATRA_ARC_DEGREES,
     NAKSHATRAS,
@@ -48,6 +48,14 @@ def rashi_matches(
     return arc_matches(_normalize_degrees(sidereal_longitude), arc_start, RASHI_ARC_DEGREES, tolerance_degrees)
 
 
+def rashi_margin(
+    sidereal_longitude: float, rashi_index: int, tolerance_degrees: float = 0.0
+) -> float:
+    """Signed degrees to the padded rashi arc's edge (>= 0 iff rashi_matches)."""
+    arc_start = rashi_index * RASHI_ARC_DEGREES
+    return arc_margin(_normalize_degrees(sidereal_longitude), arc_start, RASHI_ARC_DEGREES, tolerance_degrees)
+
+
 def rashi_score(
     sidereal_longitude: float, rashi_index: int, tolerance_degrees: float = 0.0
 ) -> float:
@@ -69,6 +77,16 @@ def nakshatra_matches(
     """
     arc_start = nakshatra_index * NAKSHATRA_ARC_DEGREES
     return arc_matches(
+        _normalize_degrees(sidereal_longitude), arc_start, NAKSHATRA_ARC_DEGREES, tolerance_degrees
+    )
+
+
+def nakshatra_margin(
+    sidereal_longitude: float, nakshatra_index: int, tolerance_degrees: float = 0.0
+) -> float:
+    """Signed degrees to the padded nakshatra arc's edge (>= 0 iff nakshatra_matches)."""
+    arc_start = nakshatra_index * NAKSHATRA_ARC_DEGREES
+    return arc_margin(
         _normalize_degrees(sidereal_longitude), arc_start, NAKSHATRA_ARC_DEGREES, tolerance_degrees
     )
 

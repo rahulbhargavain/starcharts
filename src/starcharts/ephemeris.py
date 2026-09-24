@@ -83,6 +83,21 @@ def _calc(jd_ut: float, body: int, flags: int):
     return swe.calc_ut(jd_ut, body, flags)
 
 
+def sidereal_longitude_and_speed(
+    jd_ut: float, body: int, ayanamsha: Ayanamsha = DEFAULT_AYANAMSHA
+) -> tuple[float, float]:
+    """Just the sidereal longitude and its speed -- the same values
+    graha_position() returns, with the same Moshier-then-data-files
+    fallback, from one ephemeris call instead of three. For hot loops such
+    as the search engine's constraint scans."""
+    swe.set_sid_mode(ayanamsha.value)
+    try:
+        xx, _ = _calc(jd_ut, body, swe.FLG_MOSEPH | swe.FLG_SPEED | swe.FLG_SIDEREAL)
+    except swe.Error:
+        xx, _ = _calc(jd_ut, body, swe.FLG_SWIEPH | swe.FLG_SPEED | swe.FLG_SIDEREAL)
+    return xx[0], xx[3]
+
+
 def graha_position(
     jd_ut: float,
     body: int,

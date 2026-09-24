@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 import swisseph as swe
 
-from starcharts.arcs import arc_matches, arc_score
+from starcharts.arcs import arc_margin, arc_matches, arc_score
 
 TITHI_ARC_DEGREES = 12.0
 _PAKSHA_TITHI_COUNT = 15
@@ -24,14 +24,18 @@ class Tithi:
     degrees_into_tithi: float
 
 
-def tropical_longitude(jd_ut: float, body: int) -> float:
+def _tropical_longitude_and_speed(jd_ut: float, body: int) -> tuple[float, float]:
     """Same Moshier-first, Swiss-Ephemeris-data-file-fallback behaviour
     as ephemeris.graha_position -- see that module's docstring."""
     try:
         xx, _ = swe.calc_ut(jd_ut, body, swe.FLG_MOSEPH | swe.FLG_SPEED)
     except swe.Error:
         xx, _ = swe.calc_ut(jd_ut, body, swe.FLG_SWIEPH | swe.FLG_SPEED)
-    return xx[0]
+    return xx[0], xx[3]
+
+
+def tropical_longitude(jd_ut: float, body: int) -> float:
+    return _tropical_longitude_and_speed(jd_ut, body)[0]
 
 
 def moon_sun_elongation(jd_ut: float) -> float:
@@ -71,6 +75,16 @@ def tithi_matches(jd_ut: float, tithi_number: int, tolerance_degrees: float = 0.
     elongation = moon_sun_elongation(jd_ut)
     arc_start = (tithi_number - 1) * TITHI_ARC_DEGREES
     return arc_matches(elongation, arc_start, TITHI_ARC_DEGREES, tolerance_degrees)
+
+
+def tithi_margin(jd_ut: float, tithi_number: int, tolerance_degrees: float = 0.0) -> tuple[float, float]:
+    """(signed degrees of elongation to the padded tithi arc's edge, the
+    elongation's rate in degrees/day). margin >= 0 iff tithi_matches."""
+    moon, moon_speed = _tropical_longitude_and_speed(jd_ut, swe.MOON)
+    sun, sun_speed = _tropical_longitude_and_speed(jd_ut, swe.SUN)
+    arc_start = (tithi_number - 1) * TITHI_ARC_DEGREES
+    margin = arc_margin((moon - sun) % 360.0, arc_start, TITHI_ARC_DEGREES, tolerance_degrees)
+    return margin, moon_speed - sun_speed
 
 
 def tithi_score(jd_ut: float, tithi_number: int, tolerance_degrees: float = 0.0) -> float:
