@@ -132,7 +132,7 @@ def search(profile: SearchProfile) -> list[CandidateMatch]:
             if not windows:
                 return []
 
-    return _score_candidates(windows, profile, FINE_STEP_DAYS)
+    return _score_candidates(windows, profile, FINE_STEP_DAYS, (jd_start, jd_end))
 
 
 def cluster_into_epochs(
@@ -154,25 +154,33 @@ def cluster_into_epochs(
     return epochs
 
 
-def _sample_times(windows: list[tuple[float, float]], step_days: float) -> list[float]:
+def _sample_times(
+    windows: list[tuple[float, float]], step_days: float, jd_range: tuple[float, float]
+) -> list[float]:
     """Every step_days across each window, padded by one step on each side
     so ranking sees the approach to each boundary, plus each window's
-    midpoint so even a window shorter than one step is sampled inside."""
+    midpoint so even a window shorter than one step is sampled inside.
+    The padding never reaches outside the requested range."""
+    lo, hi = jd_range
     times: set[float] = set()
     for window_start, window_end in windows:
         jd = window_start - step_days
         while jd <= window_end + step_days:
-            times.add(jd)
+            if lo <= jd <= hi:
+                times.add(jd)
             jd += step_days
         times.add((window_start + window_end) / 2.0)
     return sorted(times)
 
 
 def _score_candidates(
-    windows: list[tuple[float, float]], profile: SearchProfile, step_days: float
+    windows: list[tuple[float, float]],
+    profile: SearchProfile,
+    step_days: float,
+    jd_range: tuple[float, float],
 ) -> list[CandidateMatch]:
     candidates: list[CandidateMatch] = []
-    for jd in _sample_times(windows, step_days):
+    for jd in _sample_times(windows, step_days, jd_range):
         per_constraint = tuple(c.score(jd, profile.ayanamsha) for c in profile.constraints)
         combined = min(per_constraint) if per_constraint else 0.0
         candidates.append(CandidateMatch(jd, combined, per_constraint))

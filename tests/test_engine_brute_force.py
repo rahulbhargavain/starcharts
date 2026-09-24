@@ -11,8 +11,6 @@ closer than SPELL_GAP_DAYS apart belong to the same spell.
 """
 
 import random
-from pathlib import Path
-
 import pytest
 
 from starcharts.ayanamsha import DEFAULT_AYANAMSHA
@@ -34,11 +32,7 @@ from starcharts.panchanga import _tropical_longitude_and_speed
 import swisseph as swe
 
 SPELL_GAP_DAYS = 2.0
-EPHE_DIR = Path(__file__).resolve().parent.parent / "ephe"
-needs_data_files = pytest.mark.skipif(
-    not any(EPHE_DIR.glob("*.se1")),
-    reason="Swiss Ephemeris data files not downloaded (run ephe/download.sh)",
-)
+needs_data_files = pytest.mark.ephe_data  # see conftest.py
 
 
 # --- helpers -----------------------------------------------------------------

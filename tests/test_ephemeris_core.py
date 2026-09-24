@@ -56,6 +56,7 @@ def test_ancient_bce_date_within_moshier_range_does_not_crash():
     assert len(chart) == 7
 
 
+@pytest.mark.ephe_data
 def test_dates_older_than_moshier_range_fall_back_to_swieph_data_files():
     # The traditional Kali Yuga epoch (3102 BCE, astronomical year -3101)
     # falls just outside Moshier's ~3002 BCE lower bound, but graha_position

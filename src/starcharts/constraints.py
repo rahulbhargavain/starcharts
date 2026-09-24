@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from starcharts.ascendant import ascendant_position
 from starcharts.ayanamsha import Ayanamsha
 from starcharts.constants import GRAHAS
-from starcharts.ephemeris import graha_position, sidereal_longitude_and_speed
+from starcharts.ephemeris import sidereal_longitude_and_speed
 from starcharts.motion import ELONGATION_MOTION, GRAHA_MOTION, NODE_MOTION, MotionBounds
 from starcharts.nodes import NODE_NAMES, node_position, node_sidereal_longitude_and_speed
 from starcharts.panchanga import tithi_margin, tithi_matches, tithi_score
@@ -59,8 +59,8 @@ class RashiConstraint:
             raise ValueError("rashi_index must be 0-11")
 
     def is_satisfied(self, jd_ut: float, ayanamsha: Ayanamsha) -> bool:
-        position = graha_position(jd_ut, GRAHAS[self.graha], ayanamsha=ayanamsha)
-        return rashi_matches(position.sidereal_longitude, self.rashi_index, self.tolerance_degrees)
+        longitude, _speed = sidereal_longitude_and_speed(jd_ut, GRAHAS[self.graha], ayanamsha)
+        return rashi_matches(longitude, self.rashi_index, self.tolerance_degrees)
 
     def margin(self, jd_ut: float, ayanamsha: Ayanamsha) -> tuple[float, float | None]:
         longitude, speed = sidereal_longitude_and_speed(jd_ut, GRAHAS[self.graha], ayanamsha)
@@ -77,8 +77,8 @@ class RashiConstraint:
         return SCAN_ORDER[self.graha]
 
     def score(self, jd_ut: float, ayanamsha: Ayanamsha) -> float:
-        position = graha_position(jd_ut, GRAHAS[self.graha], ayanamsha=ayanamsha)
-        return rashi_score(position.sidereal_longitude, self.rashi_index, self.tolerance_degrees)
+        longitude, _speed = sidereal_longitude_and_speed(jd_ut, GRAHAS[self.graha], ayanamsha)
+        return rashi_score(longitude, self.rashi_index, self.tolerance_degrees)
 
 
 @dataclass(frozen=True)
@@ -93,10 +93,8 @@ class NakshatraConstraint:
             raise ValueError("nakshatra_index must be 0-26")
 
     def is_satisfied(self, jd_ut: float, ayanamsha: Ayanamsha) -> bool:
-        position = graha_position(jd_ut, GRAHAS[self.graha], ayanamsha=ayanamsha)
-        return nakshatra_matches(
-            position.sidereal_longitude, self.nakshatra_index, self.tolerance_degrees
-        )
+        longitude, _speed = sidereal_longitude_and_speed(jd_ut, GRAHAS[self.graha], ayanamsha)
+        return nakshatra_matches(longitude, self.nakshatra_index, self.tolerance_degrees)
 
     def margin(self, jd_ut: float, ayanamsha: Ayanamsha) -> tuple[float, float | None]:
         longitude, speed = sidereal_longitude_and_speed(jd_ut, GRAHAS[self.graha], ayanamsha)
@@ -113,10 +111,8 @@ class NakshatraConstraint:
         return SCAN_ORDER[self.graha]
 
     def score(self, jd_ut: float, ayanamsha: Ayanamsha) -> float:
-        position = graha_position(jd_ut, GRAHAS[self.graha], ayanamsha=ayanamsha)
-        return nakshatra_score(
-            position.sidereal_longitude, self.nakshatra_index, self.tolerance_degrees
-        )
+        longitude, _speed = sidereal_longitude_and_speed(jd_ut, GRAHAS[self.graha], ayanamsha)
+        return nakshatra_score(longitude, self.nakshatra_index, self.tolerance_degrees)
 
 
 @dataclass(frozen=True)
@@ -153,8 +149,8 @@ class RetrogradeConstraint:
         _validate_graha(self.graha)
 
     def is_satisfied(self, jd_ut: float, ayanamsha: Ayanamsha) -> bool:
-        position = graha_position(jd_ut, GRAHAS[self.graha], ayanamsha=ayanamsha)
-        return position.retrograde == self.retrograde
+        _longitude, speed = sidereal_longitude_and_speed(jd_ut, GRAHAS[self.graha], ayanamsha)
+        return (speed < 0) == self.retrograde
 
     def margin(self, jd_ut: float, ayanamsha: Ayanamsha) -> tuple[float, float | None]:
         # The margin is the speed itself (deg/day), signed so that >= 0

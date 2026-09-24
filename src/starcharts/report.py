@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import swisseph as swe
 
-from starcharts.ayanamsha import Ayanamsha
+from starcharts.ayanamsha import Ayanamsha, ayanamsha_degrees
 from starcharts.chart import GrahaPlacement, compute_chart_at_jd
 from starcharts.constraints import Constraint
 from starcharts.engine import CandidateMatch, SearchProfile
@@ -133,8 +133,7 @@ def generate_report(
 
 
 def _ayanamsha_degrees_for(jd_ut: float, ayanamsha: Ayanamsha) -> float:
-    swe.set_sid_mode(ayanamsha.value)
-    return swe.get_ayanamsa_ut(jd_ut)
+    return ayanamsha_degrees(jd_ut, ayanamsha)
 
 
 def generate_reports(

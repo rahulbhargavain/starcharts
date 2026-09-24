@@ -6,7 +6,7 @@ from starcharts.calendar import find_calendar_dates, find_tithi_jd_near
 from starcharts.ephemeris import to_julian_day_ut
 from starcharts.masa import masa_at
 from starcharts.panchanga import tithi_at, tithi_matches, tithi_number_for
-from starcharts.rashi import nakshatra_matches, to_nakshatra
+from starcharts.rashi import nakshatra_matches
 from starcharts.search import find_elongation_crossing
 
 

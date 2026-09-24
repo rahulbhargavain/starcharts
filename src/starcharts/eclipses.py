@@ -18,8 +18,7 @@ from dataclasses import dataclass
 
 import swisseph as swe
 
-from starcharts.ephemeris import EPHE_DIR  # noqa: F401 (ensures ephe path is set)
-from starcharts.ephemeris import model_from_flags
+from starcharts.ephemeris import ensure_thread_ready, model_from_flags
 
 
 @dataclass(frozen=True)
@@ -30,16 +29,19 @@ class Eclipse:
 
 
 def _model_at(jd_ut: float) -> str:
+    ensure_thread_ready()
     _xx, flags = swe.calc_ut(jd_ut, swe.MOON, swe.FLG_SWIEPH)
     return model_from_flags(flags)
 
 
 def _next_solar_eclipse(jd_ut: float) -> Eclipse:
+    ensure_thread_ready()
     _res, tret = swe.sol_eclipse_when_glob(jd_ut, swe.FLG_SWIEPH, 0, False)
     return Eclipse(jd_max=tret[0], kind="solar", ephemeris_model=_model_at(tret[0]))
 
 
 def _next_lunar_eclipse(jd_ut: float) -> Eclipse:
+    ensure_thread_ready()
     _res, tret = swe.lun_eclipse_when(jd_ut, swe.FLG_SWIEPH, 0, False)
     return Eclipse(jd_max=tret[0], kind="lunar", ephemeris_model=_model_at(tret[0]))
 
@@ -87,7 +89,7 @@ def find_close_eclipse_pairs(
     """
     eclipses = find_eclipses_in_range(jd_start, jd_end)
     pairs = []
-    for a, b in zip(eclipses, eclipses[1:]):
+    for a, b in zip(eclipses, eclipses[1:], strict=False):
         gap = b.jd_max - a.jd_max
         if min_gap_days <= gap <= max_gap_days:
             pairs.append(EclipsePair(first=a, second=b, gap_days=gap))

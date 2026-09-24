@@ -18,7 +18,7 @@ from dataclasses import dataclass
 import swisseph as swe
 
 from starcharts.ayanamsha import DEFAULT_AYANAMSHA, Ayanamsha
-from starcharts.ephemeris import to_julian_day_ut_astro
+from starcharts.ephemeris import ensure_thread_ready, to_julian_day_ut_astro
 
 
 @dataclass(frozen=True)
@@ -43,6 +43,7 @@ def ascendant_position(
     file-free Moshier model first (default), and falls back to the full
     Swiss Ephemeris data files if jd_ut is outside Moshier's range.
     """
+    ensure_thread_ready()
     swe.set_sid_mode(ayanamsha.value)
     model = "moshier" if use_moshier else "swieph"
     base_flag = swe.FLG_MOSEPH if use_moshier else swe.FLG_SWIEPH
