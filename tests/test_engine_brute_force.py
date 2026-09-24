@@ -291,3 +291,34 @@ def test_bhishma_parva_within_tolerance_epochs_match_brute_force():
 
     profile = war_omen_profile_bhishma_parva(-5399, 3000, tolerance_degrees=2.0, include_node_at_jyeshtha=False)
     assert _epoch_years(profile) == [-3448, -2535, 2768]
+
+
+# --- 5. short overlaps: sampling must land inside, not just near, them -------
+
+@pytest.mark.parametrize("seed", range(6))
+def test_engine_finds_sub_hour_lunar_overlaps(seed):
+    """Moon nakshatra + tithi with zero tolerance can overlap for well
+    under a day; brute force at 30-minute steps."""
+    rng = random.Random(2000 + seed)
+    year = rng.randrange(-2900, 2900)
+    profile = SearchProfile(year, year, (
+        NakshatraConstraint("Chandra", rng.randrange(27)),
+        TithiConstraint(rng.randint(1, 30)),
+        RashiConstraint("Surya", rng.randrange(12), 15.0),
+    ))
+    _assert_engine_finds_every_brute_force_spell(profile, step_days=1.0 / 48.0)
+
+
+@needs_data_files
+def test_bala_kanda_best_fit_is_found_at_five_degrees():
+    """The closest fit to the Bala Kanda configuration in 5400 BCE-3000 CE
+    (9 Jan of astronomical year -5114) misses its worst constraint by
+    4.65 deg, and all constraints hold together for only ~1.4 hours at a
+    5-degree tolerance. Sampling surviving windows every 0.25 day missed
+    it; the 15-minute refinement pass finds it."""
+    from starcharts.texts.ramayana import bala_kanda_birth_profile
+
+    profile = bala_kanda_birth_profile(-5120, -5110, tolerance_degrees=5.0)
+    satisfied = [m for m in search(profile) if _satisfied(profile, m.jd_ut)]
+    assert satisfied
+    assert {swe.revjul(m.jd_ut, swe.GREG_CAL)[:2] for m in satisfied} == {(-5114, 1)}
