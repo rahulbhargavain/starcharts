@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import swisseph as swe
 
 from starcharts.arcs import arc_margin, arc_matches, arc_score
+from starcharts.ephemeris import ensure_thread_ready
 
 TITHI_ARC_DEGREES = 12.0
 _PAKSHA_TITHI_COUNT = 15
@@ -27,6 +28,7 @@ class Tithi:
 def _tropical_longitude_and_speed(jd_ut: float, body: int) -> tuple[float, float]:
     """Same Moshier-first, Swiss-Ephemeris-data-file-fallback behaviour
     as ephemeris.graha_position -- see that module's docstring."""
+    ensure_thread_ready()
     try:
         xx, _ = swe.calc_ut(jd_ut, body, swe.FLG_MOSEPH | swe.FLG_SPEED)
     except swe.Error:

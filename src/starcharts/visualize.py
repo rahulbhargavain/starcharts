@@ -4,6 +4,8 @@ Kept dependency-free (raw SVG string building) so visualization doesn't
 force a heavyweight plotting library onto the core package.
 """
 
+from html import escape
+
 from starcharts.chart import GrahaPlacement
 from starcharts.constants import RASHIS
 
@@ -20,7 +22,8 @@ _GRAHA_ABBR = {
 
 # Label anchor points for the 12 houses of a standard North-Indian diamond
 # chart, as fractions of the overall size. House 1 is the top diamond;
-# houses 2-12 proceed clockwise through the surrounding triangles.
+# houses 2-12 proceed anticlockwise (top -> left -> bottom -> right), the
+# standard North-Indian layout.
 _ANCHOR_FRACTIONS = [
     (0.50, 0.22),  # 1: top diamond
     (0.22, 0.14),  # 2
@@ -95,7 +98,7 @@ def render_kundali_svg(
     if title:
         svg_parts.append(
             f'<text x="{c:.1f}" y="{size - 6}" font-size="12" '
-            f'text-anchor="middle" fill="currentColor" opacity="0.7">{title}</text>'
+            f'text-anchor="middle" fill="currentColor" opacity="0.7">{escape(title)}</text>'
         )
 
     svg_parts.append("</svg>")

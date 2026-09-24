@@ -1,3 +1,4 @@
+import pytest
 import swisseph as swe
 
 from starcharts.engine import search
@@ -33,6 +34,7 @@ def test_war_omen_profile_bhishma_parva_builds_without_error():
     assert isinstance(matches, list)
 
 
+@pytest.mark.ephe_data
 def test_war_omen_profile_bhishma_parva_is_rare_and_misses_all_four_candidates():
     # Sanskrit-verified encoding (06,003.013c-d): Mars retrograde is part
     # of the same clause as Mars-in-Magha, not optional. Just 1 epoch in
@@ -54,6 +56,7 @@ def test_war_omen_profile_bhishma_parva_is_rare_and_misses_all_four_candidates()
         assert all(abs(year - cy) > 100 for cy in candidate_years)
 
 
+@pytest.mark.ephe_data
 def test_war_omen_profile_bhishma_parva_node_constraint_is_less_restrictive_without_it():
     # Dropping the Jyeshtha-node constraint can only raise or keep the
     # best achievable score, never lower it.
@@ -69,12 +72,14 @@ def test_war_omen_profile_bhishma_parva_node_constraint_is_less_restrictive_with
     assert best_without >= best_with
 
 
+@pytest.mark.ephe_data
 def test_war_omen_profile_udyoga_parva_builds_without_error():
     profile = war_omen_profile_udyoga_parva(-3070, -3060, tolerance_degrees=2.0)
     matches = search(profile)
     assert isinstance(matches, list)
 
 
+@pytest.mark.ephe_data
 def test_war_omen_profile_udyoga_parva_is_rare_and_misses_all_four_candidates():
     # Sanskrit-verified (5.141.8): "kṛtvā ca aṅgārakaḥ vakraṃ jyeṣṭhāyāṃ"
     # -- Mars retrograde is required, not optional. 11 tightly-spaced
@@ -94,6 +99,7 @@ def test_war_omen_profile_udyoga_parva_is_rare_and_misses_all_four_candidates():
         assert all(abs(year - cy) > 100 for cy in candidate_years)
 
 
+@pytest.mark.ephe_data
 def test_mars_circuitous_variant_is_extremely_rare_and_misses_all_four_candidates():
     # Sanskrit-verified (06,003.017a): a full Mars retrograde loop at
     # Shravana is a textually distinct moment from 013c's Mars-in-Magha.

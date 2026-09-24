@@ -8,7 +8,6 @@ Uses the mean node (SE_MEAN_NODE); Ketu is always exactly 180 degrees
 from Rahu by definition, so it's derived rather than separately queried.
 """
 
-from dataclasses import dataclass
 
 import swisseph as swe
 

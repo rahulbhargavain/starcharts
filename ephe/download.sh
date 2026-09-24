@@ -3,8 +3,14 @@
 # for dates outside Moshier's native range (~3002 BCE - ~3003 CE). See
 # README.md in this directory for the naming convention and how to
 # extend coverage further back.
+#
+# Downloads into this directory by default, or into $STARCHARTS_EPHE_DIR
+# if set -- the same variable starcharts reads, so a regular (non-editable)
+# install can keep its data files anywhere.
 set -euo pipefail
-cd "$(dirname "$0")"
+TARGET="${STARCHARTS_EPHE_DIR:-$(dirname "$0")}"
+mkdir -p "$TARGET"
+cd "$TARGET"
 
 BASE="https://raw.githubusercontent.com/aloistr/swisseph/master/ephe"
 FILES=(

@@ -9,7 +9,7 @@ def test_find_eclipses_in_range_returns_alternating_kinds_roughly():
     assert len(eclipses) > 5
     assert {"solar", "lunar"} <= {e.kind for e in eclipses}
     # chronologically sorted
-    assert all(a.jd_max <= b.jd_max for a, b in zip(eclipses, eclipses[1:]))
+    assert all(a.jd_max <= b.jd_max for a, b in zip(eclipses, eclipses[1:], strict=False))
 
 
 def test_close_eclipse_pairs_never_fall_below_the_true_minimum_gap():

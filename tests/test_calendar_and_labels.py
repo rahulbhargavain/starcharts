@@ -3,18 +3,16 @@ landing in the requested tithi, and ephemeris-model labelling -- checked
 against published calendars and by brute force over many months/trials."""
 
 import random
-from pathlib import Path
 
 import pytest
 import swisseph as swe
 
 from starcharts.calendar import find_calendar_dates, find_tithi_jd_near
 from starcharts.eclipses import find_eclipses_in_range
-from starcharts.ephemeris import graha_position, model_from_flags
+from starcharts.ephemeris import EPHE_DIR, graha_position, model_from_flags
 from starcharts.masa import MASA_NAMES, masa_at
 from starcharts.panchanga import tithi_at
 
-EPHE_DIR = Path(__file__).resolve().parent.parent / "ephe"
 
 
 def _months(start_year, end_year):
@@ -120,12 +118,10 @@ def test_swieph_request_without_data_files_is_labelled_moshier():
     assert position.ephemeris_model == "moshier"
 
 
-@pytest.mark.parametrize("year", [-4000, -2500, 2024])
+@pytest.mark.parametrize("year", [pytest.param(-4000, marks=pytest.mark.ephe_data), -2500, 2024])
 def test_position_label_matches_swisseph_return_flags(year):
     jd = swe.julday(year, 1, 1)
     for use_moshier in (True, False):
-        if year < -3000 and not any(EPHE_DIR.glob("*.se1")):
-            pytest.skip("Swiss Ephemeris data files not downloaded")
         position = graha_position(jd, swe.MARS, use_moshier=use_moshier)
         flag = swe.FLG_MOSEPH if (use_moshier and year > -3000) else swe.FLG_SWIEPH
         _xx, returned = swe.calc_ut(jd, swe.MARS, flag | swe.FLG_SPEED | swe.FLG_SIDEREAL)

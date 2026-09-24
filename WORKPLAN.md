@@ -20,8 +20,9 @@ Calendar dates are proleptic Gregorian.
 
 - **All five layers are built and tested**: ephemeris, ayanamsha
   conversion, luni-solar calendar, constraint search, and reporting, plus
-  an SVG kundali renderer and an interactive demo. 111 tests pass (with the
-  ephemeris data files downloaded; see `ephe/README.md`).
+  an SVG kundali renderer and an interactive demo. 117 tests pass (with the
+  ephemeris data files downloaded; see `ephe/README.md`), and CI runs them
+  with and without the data files.
 - **The search engine is checked against brute force.** It can no longer
   step over a short match (see *Verification*). Every result below was
   re-run on the fixed engine on 2026-09-24.
@@ -227,6 +228,12 @@ external rather than by shape tests:
 - **Ephemeris model mislabelled** (2026-09-24). swisseph silently uses
   Moshier where no data file covers the date, so CE-era "swieph" positions
   and eclipses were really Moshier.
+- **Worker threads couldn't reach the data files** (2026-09-24). swisseph
+  keeps its settings per thread, and the data-file path was set only in
+  the importing thread, so any computation before ~3000 BCE failed in
+  another thread. The path is now set per thread. (The review's concern,
+  a race on the global sidereal mode, turned out not to apply: the mode is
+  per-thread too.)
 
 ## Decisions
 
@@ -263,13 +270,9 @@ external rather than by shape tests:
   `ephe/README.md`).
 - **Krishna's birth** needs an independent discriminator, most plausibly
   the war (traditionally ~89–90 years later).
-- **Remaining review items**:
-  - `EPHE_DIR` only works for editable installs;
-  - `swe.set_sid_mode` is global state, so nothing here is thread-safe;
-  - `visualize.py` doesn't escape the SVG title;
-  - `CLAUDE.md` and the README setup steps are out of date;
-  - there is no CI;
-  - tests that need the data files should skip cleanly without them.
+- **Parallel searches**: now safe with threads (see *Verification*), but
+  each search still runs single-threaded; splitting a long range across a
+  process or thread pool is the obvious speed-up if one is needed.
 
 ## Research log
 
@@ -363,3 +366,9 @@ the path to each current finding stays checkable.
   astronomical −5114, was previously missed entirely. It misses by 4.65° at
   worst, so it appears at 5° tolerance, not only at 8°, and it lines up
   with the traditional "10 January 5114 BCE".
+- **Closed the remaining review items**: a `STARCHARTS_EPHE_DIR` override
+  for non-editable installs, per-thread swisseph setup (see
+  *Verification*), results clipped to the requested range, single-call
+  cached ephemeris lookups for scoring, SVG title escaping, CI (lint, and
+  tests with and without the data files), and tests that skip cleanly
+  without the data files.

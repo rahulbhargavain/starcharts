@@ -27,8 +27,21 @@ repo (https://github.com/aloistr/swisseph/tree/master/ephe) for whatever
 block you need, e.g. `seplm60.se1` + `semom60.se1` for ~6000-5401 BCE,
 and add them to `download.sh` so the fetch stays reproducible.
 
+## Where starcharts looks for them
+
+This directory, when running from a source checkout or an editable
+install (`pip install -e .`). With a regular install the package lives in
+`site-packages`, so set `STARCHARTS_EPHE_DIR` to wherever you keep the
+files; `download.sh` honours the same variable:
+
+```bash
+export STARCHARTS_EPHE_DIR=~/starcharts-ephe
+bash ephe/download.sh
+```
+
 ## License
 
-The Swiss Ephemeris (including these data files) is AGPL/dual-licensed
-by Astrodienst -- see the MIT-licensing note in `WORKPLAN.md`. Fine for
-this project's current research use; revisit before redistributing.
+The Swiss Ephemeris, including these data files, is AGPL/dual-licensed
+by Astrodienst, and starcharts is AGPL-3.0-or-later accordingly. See
+"Decisions" in `WORKPLAN.md` for the permissively licensed alternative
+(`openephem` with JPL kernels) if that ever matters.

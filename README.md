@@ -25,10 +25,12 @@ quality rather than a single answer.
 
 ## Setup
 
+Requires Python 3.11+.
+
 ```bash
 python -m venv .venv
-.venv/Scripts/activate
-pip install -e .
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
 ```
 
 Dates outside ~3002 BCE–3003 CE need the real Swiss Ephemeris data
@@ -37,6 +39,12 @@ files (not checked into the repo — see `ephe/README.md`):
 ```bash
 bash ephe/download.sh
 ```
+
+With a regular (non-editable) install, set `STARCHARTS_EPHE_DIR` to
+wherever the data files live; `download.sh` uses the same variable.
+
+Run the tests with `pytest` (and lint with `ruff check .`). Tests that
+need the data files are skipped, not failed, when the files are absent.
 
 ## Example
 
