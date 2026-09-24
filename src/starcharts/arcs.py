@@ -15,13 +15,25 @@ def signed_gap_to_center(longitude: float, arc_start: float, arc_width: float) -
     return (longitude - center + 180.0) % 360.0 - 180.0
 
 
+def arc_margin(
+    longitude: float, arc_start: float, arc_width: float, tolerance_degrees: float = 0.0
+) -> float:
+    """Signed angular distance to the tolerance-padded arc's nearest edge:
+    positive inside (how far longitude could move and still match),
+    negative outside (how far it must move to match). arc_matches() is
+    exactly `arc_margin(...) >= 0`. Changes by at most as much as longitude
+    does, which is what lets the search engine bound how soon a match can
+    start or end from a single sample."""
+    gap = signed_gap_to_center(longitude, arc_start, arc_width)
+    return arc_width / 2.0 + tolerance_degrees - abs(gap)
+
+
 def arc_matches(
     longitude: float, arc_start: float, arc_width: float, tolerance_degrees: float = 0.0
 ) -> bool:
     """Does longitude fall within [arc_start, arc_start + arc_width],
     padded by tolerance_degrees on each side?"""
-    gap = signed_gap_to_center(longitude, arc_start, arc_width)
-    return abs(gap) <= arc_width / 2.0 + tolerance_degrees
+    return arc_margin(longitude, arc_start, arc_width, tolerance_degrees) >= 0.0
 
 
 def arc_score(

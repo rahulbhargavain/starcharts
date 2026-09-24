@@ -1,51 +1,50 @@
-"""Coarse-to-fine constraint search across a multi-millennium date range.
+"""Constraint search across a multi-millennium date range.
 
 The core problem: given several graha/tithi constraints, find every
 Julian day in a huge range where they all hold, without checking every
-day one at a time. The trick is ordering constraints from slowest-moving
-to fastest and scanning at a step size safe for the *current* stage's
-slowest constrained graha -- each stage only has to survive not skipping
-past a satisfying window, not pin down the exact day. Only the final stage
-scans at high resolution, and only within windows that already survived
-every coarser filter.
+day one at a time.
 
-Stage grouping and step sizes intentionally follow the mean time a graha
-spends per rashi (30 degrees), halved for safety margin so a scan can't
-step clean over a satisfying window:
-    Shani (Saturn)  ~897 days/rashi  -> coarse stage,  200-day steps
-    Guru (Jupiter)  ~361 days/rashi  -> coarse stage shares the 200-day step
-    Mangala (Mars)  ~57 days/rashi   -> mars stage,      20-day steps
-    Surya/Shukra/Budha (Sun/Venus/Mercury, treated alike for this coarse
-                    purpose despite Venus/Mercury's retrograde loops)
-                    ~30 days/rashi   -> fine stage,        5-day steps
-    Chandra (Moon)  ~2.25 days/rashi -> moon stage,      0.25-day steps
-    Rahu/Ketu (nodes) ~251 days/nakshatra -> mars stage's 20-day step is
-                    comfortably safe for these too (18.6-year node cycle)
-Tithi and retrograde constraints are cheap to check at any resolution and
-are folded into the moon stage (tithi changes about once a day, same
-order as the Moon's rashi-transit rate).
+Each prunable constraint reports a signed margin -- how far its value is
+from the match boundary, >= 0 exactly when it's satisfied -- and bounds on
+how fast that margin can change (motion.py). From one sample the engine
+therefore knows how long the constraint is guaranteed to stay on its
+current side of the boundary, and steps exactly that far: huge steps when
+a slow graha is far from its arc, small ones only near a boundary. A
+stretch is discarded only when the bounds prove the constraint fails
+throughout it, so no match can be stepped over, however short it is or
+however briefly several constraints overlap. Where the bounds can't
+certify a stretch of at least MIN_STEP_DAYS, that stretch is kept rather
+than dropped, so windows may run up to one step past a true boundary.
+
+Constraints are scanned slowest-first (constraints.SCAN_ORDER): the
+first is scanned over the whole range, each later one only inside what
+earlier ones left, so the result is the intersection. Surviving windows
+are then sampled every FINE_STEP_DAYS (plus each window's midpoint, so a
+window shorter than one step is still sampled inside) and ranked by the
+constraints' continuous scores.
+
+This replaced fixed per-stage step sizes (200 days for Shani/Guru, 20 for
+Mangala/nodes, 5 for Surya/Shukra/Budha) chosen from the mean time a
+graha spends in a whole rashi. Those steps were longer than many
+satisfying windows -- a Guru nakshatra transit or retrograde spell, or the
+overlap of two constraints -- and silently missed real matches (e.g. 2 of
+3 Bhishma Parva epochs and 3 of 14 Udyoga Parva epochs across
+5400 BCE - 3000 CE). tests/test_engine_brute_force.py checks the engine
+against dense brute-force scans.
+
+Constraints without a margin() (e.g. AscendantConstraint, which moves too
+fast for date-level scanning) don't prune; they're only scored.
 """
 
 from dataclasses import dataclass
 
 from starcharts.ayanamsha import DEFAULT_AYANAMSHA, Ayanamsha
-from starcharts.constraints import (
-    Constraint,
-    NakshatraConstraint,
-    NodeNakshatraConstraint,
-    RashiConstraint,
-    RetrogradeConstraint,
-    TithiConstraint,
-)
+from starcharts.constraints import Constraint
 from starcharts.ephemeris import to_julian_day_ut_astro
+from starcharts.motion import safe_duration
 
-# (stage_name, step_days, grahas/nodes checked at this stage)
-_STAGES: tuple[tuple[str, float, tuple[str, ...]], ...] = (
-    ("coarse", 200.0, ("Shani", "Guru")),
-    ("mars", 20.0, ("Mangala", "Rahu", "Ketu")),
-    ("fine", 5.0, ("Surya", "Shukra", "Budha")),
-    ("moon", 0.25, ("Chandra",)),
-)
+FINE_STEP_DAYS = 0.25  # scoring resolution inside surviving windows
+MIN_STEP_DAYS = FINE_STEP_DAYS  # boundaries unresolved below this are kept as possible matches
 
 
 @dataclass(frozen=True)
@@ -63,38 +62,36 @@ class CandidateMatch:
     per_constraint_scores: tuple[float, ...]
 
 
-def _graha_of(constraint: Constraint) -> str | None:
-    if isinstance(constraint, (RashiConstraint, NakshatraConstraint, RetrogradeConstraint)):
-        return constraint.graha
-    if isinstance(constraint, NodeNakshatraConstraint):
-        return constraint.node
-    return None
+def _is_prunable(constraint: Constraint) -> bool:
+    return hasattr(constraint, "margin")
 
 
-def _scan_windows(
-    windows: list[tuple[float, float]],
-    step_days: float,
-    stage_constraints: list[Constraint],
-    ayanamsha: Ayanamsha,
+def _possible_windows(
+    windows: list[tuple[float, float]], constraint: Constraint, ayanamsha: Ayanamsha
 ) -> list[tuple[float, float]]:
-    """Step through each window at step_days, keep the sub-ranges where
-    every stage constraint is satisfied, padded by one step on each side
-    so the next (finer) stage doesn't start exactly on a boundary."""
-    survivors: list[tuple[float, float]] = []
+    """The parts of `windows` where `constraint` may be satisfied: every
+    instant it is satisfied is inside the result. Each sample certifies a
+    stretch as possibly-satisfied or definitely-not via motion.safe_duration
+    and the scan resumes where that stretch ends."""
+    bounds = constraint.motion_bounds
+    slack = constraint.margin_slack
+    kept: list[tuple[float, float]] = []
     for window_start, window_end in windows:
-        hit_start: float | None = None
         jd = window_start
         while jd <= window_end:
-            satisfied = all(c.is_satisfied(jd, ayanamsha) for c in stage_constraints)
-            if satisfied and hit_start is None:
-                hit_start = jd
-            elif not satisfied and hit_start is not None:
-                survivors.append((hit_start - step_days, jd + step_days))
-                hit_start = None
-            jd += step_days
-        if hit_start is not None:
-            survivors.append((hit_start - step_days, window_end + step_days))
-    return survivors
+            margin, rate = constraint.margin(jd, ayanamsha)
+            if margin + slack >= 0.0:
+                # Possibly satisfied until the margin could drop below -slack.
+                step = max(safe_duration(margin + slack, rate, bounds), MIN_STEP_DAYS)
+                kept.append((jd, min(jd + step, window_end)))
+            else:
+                # Definitely not satisfied until the margin could climb to -slack.
+                step = safe_duration(-(margin + slack), rate, bounds)
+                if step < MIN_STEP_DAYS:
+                    step = MIN_STEP_DAYS
+                    kept.append((jd, min(jd + step, window_end)))
+            jd += step
+    return _merge_overlapping(kept)
 
 
 def _merge_overlapping(windows: list[tuple[float, float]]) -> list[tuple[float, float]]:
@@ -119,27 +116,13 @@ def search(profile: SearchProfile) -> list[CandidateMatch]:
     jd_end = to_julian_day_ut_astro(profile.end_astronomical_year, 12, 31)
     windows = [(jd_start, jd_end)]
 
-    for _stage_name, step_days, grahas in _STAGES:
-        stage_constraints = [c for c in profile.constraints if _graha_of(c) in grahas]
-        if not stage_constraints:
-            continue
-        windows = _merge_overlapping(
-            _scan_windows(windows, step_days, stage_constraints, profile.ayanamsha)
-        )
+    prunable = sorted((c for c in profile.constraints if _is_prunable(c)), key=lambda c: c.scan_key)
+    for constraint in prunable:
+        windows = _possible_windows(windows, constraint, profile.ayanamsha)
         if not windows:
             return []
 
-    # Tithi constraints ride along with the finest (moon) resolution scan.
-    finest_step_days = _STAGES[-1][1]
-    tithi_constraints = [c for c in profile.constraints if isinstance(c, TithiConstraint)]
-    if tithi_constraints:
-        windows = _merge_overlapping(
-            _scan_windows(windows, finest_step_days, tithi_constraints, profile.ayanamsha)
-        )
-        if not windows:
-            return []
-
-    return _score_candidates(windows, profile, finest_step_days)
+    return _score_candidates(windows, profile, FINE_STEP_DAYS)
 
 
 def cluster_into_epochs(
@@ -161,18 +144,27 @@ def cluster_into_epochs(
     return epochs
 
 
+def _sample_times(windows: list[tuple[float, float]], step_days: float) -> list[float]:
+    """Every step_days across each window, padded by one step on each side
+    so ranking sees the approach to each boundary, plus each window's
+    midpoint so even a window shorter than one step is sampled inside."""
+    times: set[float] = set()
+    for window_start, window_end in windows:
+        jd = window_start - step_days
+        while jd <= window_end + step_days:
+            times.add(jd)
+            jd += step_days
+        times.add((window_start + window_end) / 2.0)
+    return sorted(times)
+
+
 def _score_candidates(
     windows: list[tuple[float, float]], profile: SearchProfile, step_days: float
 ) -> list[CandidateMatch]:
     candidates: list[CandidateMatch] = []
-    for window_start, window_end in windows:
-        jd = window_start
-        while jd <= window_end:
-            per_constraint = tuple(
-                c.score(jd, profile.ayanamsha) for c in profile.constraints
-            )
-            combined = min(per_constraint) if per_constraint else 0.0
-            candidates.append(CandidateMatch(jd, combined, per_constraint))
-            jd += step_days
+    for jd in _sample_times(windows, step_days):
+        per_constraint = tuple(c.score(jd, profile.ayanamsha) for c in profile.constraints)
+        combined = min(per_constraint) if per_constraint else 0.0
+        candidates.append(CandidateMatch(jd, combined, per_constraint))
     candidates.sort(key=lambda c: c.score, reverse=True)
     return candidates

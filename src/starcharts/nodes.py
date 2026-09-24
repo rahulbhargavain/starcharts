@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import swisseph as swe
 
 from starcharts.ayanamsha import DEFAULT_AYANAMSHA, Ayanamsha
-from starcharts.ephemeris import Position, graha_position
+from starcharts.ephemeris import Position, graha_position, sidereal_longitude_and_speed
 
 RAHU_BODY = swe.MEAN_NODE
 NODE_NAMES = ("Rahu", "Ketu")
@@ -40,4 +40,17 @@ def node_position(jd_ut: float, node: str, ayanamsha: Ayanamsha = DEFAULT_AYANAM
         return rahu_position(jd_ut, ayanamsha)
     if node == "Ketu":
         return ketu_position(jd_ut, ayanamsha)
+    raise ValueError(f"node must be one of {NODE_NAMES}, got {node!r}")
+
+
+def node_sidereal_longitude_and_speed(
+    jd_ut: float, node: str, ayanamsha: Ayanamsha = DEFAULT_AYANAMSHA
+) -> tuple[float, float]:
+    """node_position()'s sidereal longitude and speed from a single
+    ephemeris call -- for the search engine's scans."""
+    longitude, speed = sidereal_longitude_and_speed(jd_ut, RAHU_BODY, ayanamsha)
+    if node == "Rahu":
+        return longitude, speed
+    if node == "Ketu":
+        return (longitude + 180.0) % 360.0, speed
     raise ValueError(f"node must be one of {NODE_NAMES}, got {node!r}")

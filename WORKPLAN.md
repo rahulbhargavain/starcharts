@@ -195,8 +195,10 @@ engine (layer 4) are built and tested (22/22 passing) in `src/starcharts/`:
   (hard boolean, for pruning) and `score` (continuous, for ranking).
 - `engine.py` — coarse-to-fine search: stages ordered slowest-to-fastest
   graha (Shani/Guru -> Mangala -> Surya/Shukra/Budha -> Chandra+tithi),
-  each stage scanning at a step size safe for that stage's slowest
-  constrained graha. Verified against a known chart (recovers 2024-01-01
+  each stage scanning at a fixed step size. (Those fixed steps turned out
+  NOT to be safe -- see "Search engine could step over matches" at the
+  end of this file; the engine now steps by proven speed bounds instead.)
+  Verified against a known chart (recovers 2024-01-01
   from a full 2000-year and a ~6000-year search in well under a second)
   and against a deliberately impossible constraint (correctly returns no
   candidates without scanning to the fine stages).
@@ -830,3 +832,48 @@ the four popularly-debated ones either. The honest state of this
 sub-project is that the Mahabharata's own omen catalogue, read
 carefully, is real, checkable astronomy that happens rarely -- and none
 of the popular dating proposals line up with when it actually happens.
+
+## Search engine could step over matches -- fixed, results re-checked (2026-09-24)
+
+A review found that `engine.search()`'s fixed stage steps (200 days for
+Shani/Guru, 20 for Mangala/nodes, 5 for Surya/Shukra/Budha) were sized
+from the mean time a graha spends in a whole rashi, not from how briefly
+a constraint -- or an overlap of several -- can actually hold. Anything
+shorter than a step could be stepped over. Checked against dense
+brute-force scans with identical constraints:
+
+| Profile | Old engine | Brute force |
+|---|---|---|
+| Guru in Shravana, 0-3000 CE | 190 spells | 376 |
+| Guru retrograde, 2000-2100 | 35 spells | 92 |
+| Shani-Rohini + Guru-Shravana, 250 BCE-0 | 0 spells | 3 |
+| Udyoga 5.141.7-8, within 2 deg tolerance | 11 epochs | 14 |
+
+**Fix**: each constraint now reports a signed margin to its match boundary
+plus bounds on how fast that margin can change (`motion.py`, measured
+over 5300 BCE-2940 CE with headroom), and the engine steps exactly as far
+as those bounds prove the constraint can't change state. Nothing shorter
+than a step can be missed any more, including brief overlaps. It is also
+no slower: ~1.3-1.5 s for the full ~8400-year Mahabharata profiles.
+`tests/test_engine_brute_force.py` re-checks the bounds against the
+ephemeris and the engine against brute-force scans (fixed miss patterns
+plus randomized profiles).
+
+**What changes in the conclusions above**:
+- The *perfect* matches (every constraint inside its arc, score > 0.99)
+  are unchanged: Bhishma 013c-d still 1 epoch (3449 BCE), the Shravana
+  loop still 1 (882 CE), Udyoga still 11. The old engine never missed
+  these; the tests pinning them still pass as written.
+- *Within the 2-degree tolerance*, Udyoga gains three epochs the old
+  engine missed: **4628, 1946 and 1299 BCE**. 1299 BCE is **179 years
+  from the 1478 BCE candidate** -- closer than any Udyoga epoch known
+  before (621 years). Still not within the ~100-year margin the tests
+  use, so the "misses all four candidates" statements hold.
+- Bhishma 013c-d's two within-tolerance epochs, 2536 BCE (87 years from
+  the 2449 BCE candidate) and 2768 CE, were already found by the old
+  engine; an earlier comparison that suggested otherwise was comparing
+  perfect-match counts against within-tolerance counts.
+
+Anything else run through the old engine with Guru/Shani nakshatra or
+retrograde constraints, or with brief multi-constraint overlaps, is
+worth re-running.

@@ -13,15 +13,33 @@ from dataclasses import dataclass
 from starcharts.ascendant import ascendant_position
 from starcharts.ayanamsha import Ayanamsha
 from starcharts.constants import GRAHAS
-from starcharts.ephemeris import graha_position
-from starcharts.nodes import NODE_NAMES, node_position
-from starcharts.panchanga import tithi_matches, tithi_score
+from starcharts.ephemeris import graha_position, sidereal_longitude_and_speed
+from starcharts.motion import ELONGATION_MOTION, GRAHA_MOTION, NODE_MOTION, MotionBounds
+from starcharts.nodes import NODE_NAMES, node_position, node_sidereal_longitude_and_speed
+from starcharts.panchanga import tithi_margin, tithi_matches, tithi_score
 from starcharts.rashi import (
+    nakshatra_margin,
     nakshatra_matches,
     nakshatra_score,
+    rashi_margin,
     rashi_matches,
     rashi_score,
 )
+
+# Prunable constraints also expose margin() -> (signed distance to the
+# match boundary, its current rate or None), >= 0 exactly when
+# is_satisfied(), plus the MotionBounds that bound how fast that margin can
+# change and a margin_slack covering errors in the reported values. The
+# engine uses these to skip ahead without stepping over a match -- see
+# motion.py and engine.py.
+#
+# Scan order for the engine: slowest-changing first, so the cheapest,
+# widest steps prune the range before faster bodies are scanned.
+SCAN_ORDER: dict[str, int] = {
+    "node": 0, "Shani": 1, "Guru": 2, "Mangala": 3, "Surya": 4,
+    "Shukra": 5, "Budha": 6, "Chandra": 7, "tithi": 8,
+}
+POSITION_SLACK_DEGREES = 1e-4  # covers tiny position jumps between ephemeris segments
 
 
 def _validate_graha(graha: str) -> None:
@@ -43,6 +61,20 @@ class RashiConstraint:
     def is_satisfied(self, jd_ut: float, ayanamsha: Ayanamsha) -> bool:
         position = graha_position(jd_ut, GRAHAS[self.graha], ayanamsha=ayanamsha)
         return rashi_matches(position.sidereal_longitude, self.rashi_index, self.tolerance_degrees)
+
+    def margin(self, jd_ut: float, ayanamsha: Ayanamsha) -> tuple[float, float | None]:
+        longitude, speed = sidereal_longitude_and_speed(jd_ut, GRAHAS[self.graha], ayanamsha)
+        return rashi_margin(longitude, self.rashi_index, self.tolerance_degrees), speed
+
+    @property
+    def motion_bounds(self) -> MotionBounds:
+        return GRAHA_MOTION[self.graha]
+
+    margin_slack = POSITION_SLACK_DEGREES
+
+    @property
+    def scan_key(self) -> int:
+        return SCAN_ORDER[self.graha]
 
     def score(self, jd_ut: float, ayanamsha: Ayanamsha) -> float:
         position = graha_position(jd_ut, GRAHAS[self.graha], ayanamsha=ayanamsha)
@@ -66,6 +98,20 @@ class NakshatraConstraint:
             position.sidereal_longitude, self.nakshatra_index, self.tolerance_degrees
         )
 
+    def margin(self, jd_ut: float, ayanamsha: Ayanamsha) -> tuple[float, float | None]:
+        longitude, speed = sidereal_longitude_and_speed(jd_ut, GRAHAS[self.graha], ayanamsha)
+        return nakshatra_margin(longitude, self.nakshatra_index, self.tolerance_degrees), speed
+
+    @property
+    def motion_bounds(self) -> MotionBounds:
+        return GRAHA_MOTION[self.graha]
+
+    margin_slack = POSITION_SLACK_DEGREES
+
+    @property
+    def scan_key(self) -> int:
+        return SCAN_ORDER[self.graha]
+
     def score(self, jd_ut: float, ayanamsha: Ayanamsha) -> float:
         position = graha_position(jd_ut, GRAHAS[self.graha], ayanamsha=ayanamsha)
         return nakshatra_score(
@@ -87,6 +133,13 @@ class TithiConstraint:
         # every constraint shares the same call signature.
         return tithi_matches(jd_ut, self.tithi_number, self.tolerance_degrees)
 
+    def margin(self, jd_ut: float, ayanamsha: Ayanamsha) -> tuple[float, float | None]:
+        return tithi_margin(jd_ut, self.tithi_number, self.tolerance_degrees)
+
+    motion_bounds = ELONGATION_MOTION
+    margin_slack = POSITION_SLACK_DEGREES
+    scan_key = SCAN_ORDER["tithi"]
+
     def score(self, jd_ut: float, ayanamsha: Ayanamsha) -> float:
         return tithi_score(jd_ut, self.tithi_number, self.tolerance_degrees)
 
@@ -102,6 +155,26 @@ class RetrogradeConstraint:
     def is_satisfied(self, jd_ut: float, ayanamsha: Ayanamsha) -> bool:
         position = graha_position(jd_ut, GRAHAS[self.graha], ayanamsha=ayanamsha)
         return position.retrograde == self.retrograde
+
+    def margin(self, jd_ut: float, ayanamsha: Ayanamsha) -> tuple[float, float | None]:
+        # The margin is the speed itself (deg/day), signed so that >= 0
+        # means satisfied; its own rate (the acceleration) isn't reported.
+        _longitude, speed = sidereal_longitude_and_speed(jd_ut, GRAHAS[self.graha], ayanamsha)
+        return (-speed if self.retrograde else speed), None
+
+    @property
+    def motion_bounds(self) -> MotionBounds:
+        # The speed changes by at most the graha's max_rate_change per day.
+        return MotionBounds(GRAHA_MOTION[self.graha].max_rate_change, 0.0, 0.0)
+
+    @property
+    def margin_slack(self) -> float:
+        # Reported speed can be off by rate_error at both ends of a step.
+        return 2.0 * GRAHA_MOTION[self.graha].rate_error
+
+    @property
+    def scan_key(self) -> int:
+        return SCAN_ORDER[self.graha]
 
     def score(self, jd_ut: float, ayanamsha: Ayanamsha) -> float:
         return 1.0 if self.is_satisfied(jd_ut, ayanamsha) else 0.0
@@ -160,6 +233,14 @@ class NodeNakshatraConstraint:
             position.sidereal_longitude, self.nakshatra_index, self.tolerance_degrees
         )
 
+    def margin(self, jd_ut: float, ayanamsha: Ayanamsha) -> tuple[float, float | None]:
+        longitude, speed = node_sidereal_longitude_and_speed(jd_ut, self.node, ayanamsha)
+        return nakshatra_margin(longitude, self.nakshatra_index, self.tolerance_degrees), speed
+
+    motion_bounds = NODE_MOTION
+    margin_slack = POSITION_SLACK_DEGREES
+    scan_key = SCAN_ORDER["node"]
+
     def score(self, jd_ut: float, ayanamsha: Ayanamsha) -> float:
         position = node_position(jd_ut, self.node, ayanamsha)
         return nakshatra_score(
@@ -188,6 +269,15 @@ class EitherNodeNakshatraConstraint:
 
     def is_satisfied(self, jd_ut: float, ayanamsha: Ayanamsha) -> bool:
         return any(c.is_satisfied(jd_ut, ayanamsha) for c in self._candidates())
+
+    def margin(self, jd_ut: float, ayanamsha: Ayanamsha) -> tuple[float, float | None]:
+        # Rahu and Ketu move at the same speed, so the better of the two
+        # margins changes no faster than either one.
+        return max(c.margin(jd_ut, ayanamsha) for c in self._candidates())
+
+    motion_bounds = NODE_MOTION
+    margin_slack = POSITION_SLACK_DEGREES
+    scan_key = SCAN_ORDER["node"]
 
     def score(self, jd_ut: float, ayanamsha: Ayanamsha) -> float:
         return max(c.score(jd_ut, ayanamsha) for c in self._candidates())
