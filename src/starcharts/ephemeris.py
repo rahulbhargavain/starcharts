@@ -32,7 +32,7 @@ class Position:
     ayanamsha: float
     speed_deg_per_day: float
     retrograde: bool
-    ephemeris_model: str  # "moshier" or "swieph" -- which one actually computed this
+    ephemeris_model: str  # "moshier"/"swieph"/"jpl" -- read from swisseph's return flags
 
 
 def to_julian_day_ut(dt: datetime, proleptic_julian_calendar: bool = False) -> float:
@@ -83,6 +83,19 @@ def _calc(jd_ut: float, body: int, flags: int):
     return swe.calc_ut(jd_ut, body, flags)
 
 
+def model_from_flags(return_flags: int) -> str:
+    """Which ephemeris actually produced a swisseph result, from the flags
+    it returns. swisseph silently substitutes Moshier when the requested
+    data files don't cover the date, so the requested model is not proof."""
+    if return_flags & swe.FLG_JPLEPH:
+        return "jpl"
+    if return_flags & swe.FLG_SWIEPH:
+        return "swieph"
+    if return_flags & swe.FLG_MOSEPH:
+        return "moshier"
+    return "unknown"
+
+
 def sidereal_longitude_and_speed(
     jd_ut: float, body: int, ayanamsha: Ayanamsha = DEFAULT_AYANAMSHA
 ) -> tuple[float, float]:
@@ -109,22 +122,23 @@ def graha_position(
     use_moshier=True (default): use the fast, file-free Moshier model, but
     if jd_ut falls outside its valid range, automatically retry with the
     full Swiss Ephemeris data files (SEFLG_SWIEPH) instead of raising.
-    use_moshier=False: force SEFLG_SWIEPH (requires the relevant data
-    files to be present in EPHE_DIR for jd_ut's era).
+    use_moshier=False: request SEFLG_SWIEPH. If EPHE_DIR has no data file
+    for jd_ut's era, swisseph silently uses Moshier instead (when jd_ut is
+    in Moshier's range) -- Position.ephemeris_model reports the model that
+    was actually used, read from swisseph's return flags.
     """
     swe.set_sid_mode(ayanamsha.value)
-    model = "moshier" if use_moshier else "swieph"
     base_flag = swe.FLG_MOSEPH if use_moshier else swe.FLG_SWIEPH
 
     try:
         tropical_xx, _ = _calc(jd_ut, body, base_flag | swe.FLG_SPEED)
-        sidereal_xx, _ = _calc(jd_ut, body, base_flag | swe.FLG_SPEED | swe.FLG_SIDEREAL)
+        sidereal_xx, flags = _calc(jd_ut, body, base_flag | swe.FLG_SPEED | swe.FLG_SIDEREAL)
     except swe.Error:
         if not use_moshier:
             raise
-        model = "swieph"
         tropical_xx, _ = _calc(jd_ut, body, swe.FLG_SWIEPH | swe.FLG_SPEED)
-        sidereal_xx, _ = _calc(jd_ut, body, swe.FLG_SWIEPH | swe.FLG_SPEED | swe.FLG_SIDEREAL)
+        sidereal_xx, flags = _calc(jd_ut, body, swe.FLG_SWIEPH | swe.FLG_SPEED | swe.FLG_SIDEREAL)
+    model = model_from_flags(flags)
 
     speed = sidereal_xx[3]
     ayanamsha_value = swe.get_ayanamsa_ut(jd_ut)

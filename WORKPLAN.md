@@ -877,3 +877,29 @@ plus randomized profiles).
 Anything else run through the old engine with Guru/Shani nakshatra or
 retrograde constraints, or with brief multi-constraint overlaps, is
 worth re-running.
+
+## Calendar and labelling fixes (2026-09-24)
+
+Three more bugs from the same review, each now pinned by tests in
+`tests/test_calendar_and_labels.py`:
+
+- **Adhika months were named after the previous month.** An adhika month
+  (no sankranti) takes the name of the regular month that *follows* it.
+  The old code gave e.g. "Adhika Ashadha" for 2023's Jul 18 - Aug 16
+  month, which published Panchangs call Adhika Shravana; 2015, 2018,
+  2020 and 2026 were all off by one the same way. `masa.py` also now
+  flags **kshaya** months (two sankrantis; 1963, 1983 and 2123 in
+  1900-2200) with both month names, since conventions differ on which
+  one the combined month carries, and `find_calendar_dates` matches
+  either.
+- **`find_tithi_jd_near` often landed in the previous tithi** (205 of
+  400 random trials): it targeted the tithi's exact starting boundary,
+  and the root-finder's tolerance left the result just short of it. It
+  now targets the middle of the tithi's arc (0 misses in 3000 trials).
+- **The ephemeris model could be mislabelled.** swisseph silently
+  substitutes its Moshier model when no data file covers the date, and
+  reports that only in its return flags, which were discarded -- so
+  `graha_position(..., use_moshier=False)` said "swieph" for CE dates
+  (no CE data files are downloaded) and CE-era eclipses were described as
+  data-file based. `Position.ephemeris_model` and the new
+  `Eclipse.ephemeris_model` now come from the returned flags.
