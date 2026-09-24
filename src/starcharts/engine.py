@@ -14,7 +14,8 @@ stretch is discarded only when the bounds prove the constraint fails
 throughout it, so no match can be stepped over, however short it is or
 however briefly several constraints overlap. Where the bounds can't
 certify a stretch of at least MIN_STEP_DAYS, that stretch is kept rather
-than dropped, so windows may run up to one step past a true boundary.
+than dropped; a second pass at REFINE_STEP_DAYS (15 minutes) then trims
+the surviving windows, so they run at most that far past a true boundary.
 
 Constraints are scanned slowest-first (constraints.SCAN_ORDER): the
 first is scanned over the whole range, each later one only inside what
@@ -45,6 +46,7 @@ from starcharts.motion import safe_duration
 
 FINE_STEP_DAYS = 0.25  # scoring resolution inside surviving windows
 MIN_STEP_DAYS = FINE_STEP_DAYS  # boundaries unresolved below this are kept as possible matches
+REFINE_STEP_DAYS = 1.0 / 96.0  # 15 minutes: second pass over the (small) surviving windows
 
 
 @dataclass(frozen=True)
@@ -67,7 +69,10 @@ def _is_prunable(constraint: Constraint) -> bool:
 
 
 def _possible_windows(
-    windows: list[tuple[float, float]], constraint: Constraint, ayanamsha: Ayanamsha
+    windows: list[tuple[float, float]],
+    constraint: Constraint,
+    ayanamsha: Ayanamsha,
+    min_step: float = MIN_STEP_DAYS,
 ) -> list[tuple[float, float]]:
     """The parts of `windows` where `constraint` may be satisfied: every
     instant it is satisfied is inside the result. Each sample certifies a
@@ -82,13 +87,13 @@ def _possible_windows(
             margin, rate = constraint.margin(jd, ayanamsha)
             if margin + slack >= 0.0:
                 # Possibly satisfied until the margin could drop below -slack.
-                step = max(safe_duration(margin + slack, rate, bounds), MIN_STEP_DAYS)
+                step = max(safe_duration(margin + slack, rate, bounds), min_step)
                 kept.append((jd, min(jd + step, window_end)))
             else:
                 # Definitely not satisfied until the margin could climb to -slack.
                 step = safe_duration(-(margin + slack), rate, bounds)
-                if step < MIN_STEP_DAYS:
-                    step = MIN_STEP_DAYS
+                if step < min_step:
+                    step = min_step
                     kept.append((jd, min(jd + step, window_end)))
             jd += step
     return _merge_overlapping(kept)
@@ -117,10 +122,15 @@ def search(profile: SearchProfile) -> list[CandidateMatch]:
     windows = [(jd_start, jd_end)]
 
     prunable = sorted((c for c in profile.constraints if _is_prunable(c)), key=lambda c: c.scan_key)
-    for constraint in prunable:
-        windows = _possible_windows(windows, constraint, profile.ayanamsha)
-        if not windows:
-            return []
+    # Coarse pass over the whole range, then a 15-minute pass over what
+    # survives, so each window's midpoint lands inside overlaps as short as
+    # ~half an hour (the Moon moves ~0.5 deg/hour, so tight lunar
+    # constraints can overlap only briefly) instead of up to a step away.
+    for min_step in (MIN_STEP_DAYS, REFINE_STEP_DAYS):
+        for constraint in prunable:
+            windows = _possible_windows(windows, constraint, profile.ayanamsha, min_step)
+            if not windows:
+                return []
 
     return _score_candidates(windows, profile, FINE_STEP_DAYS)
 

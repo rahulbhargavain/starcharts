@@ -26,9 +26,12 @@ class CalendarMatch:
 
 
 def find_tithi_jd_near(jd_guess: float, tithi_number: int) -> float:
-    """Find the Julian day nearest jd_guess where the given tithi (1-30)
-    is current."""
-    target_degrees = (tithi_number - 1) * 12.0
+    """Find a Julian day near jd_guess where the given tithi (1-30) is
+    current: the instant the Moon-Sun elongation reaches the MIDDLE of the
+    tithi's 12-degree arc. Targeting the arc's start instead landed on the
+    boundary itself, where the root-finder's tolerance put the result
+    just inside the previous tithi about half the time."""
+    target_degrees = (tithi_number - 1) * 12.0 + 6.0
     return find_elongation_crossing(jd_guess, target_degrees)
 
 
@@ -56,7 +59,8 @@ def find_calendar_dates(
     end_jd = approx_jd + window_days
     while jd < end_jd:
         masa = masa_at(jd, ayanamsha=ayanamsha)
-        if masa.name == masa_name and (include_adhika or not masa.is_adhika):
+        names = (masa.name, masa.kshaya_other_name) if masa.is_kshaya else (masa.name,)
+        if masa_name in names and (include_adhika or not masa.is_adhika):
             candidate_jd = find_tithi_jd_near(
                 masa.amavasya_start_jd + (target_tithi - 1) * (SYNODIC_MONTH_DAYS / 30.0),
                 target_tithi,
@@ -66,7 +70,7 @@ def find_calendar_dates(
                 matches.append(
                     CalendarMatch(
                         jd_ut=candidate_jd,
-                        masa_name=masa.name,
+                        masa_name=masa_name,
                         is_adhika_masa=masa.is_adhika,
                         tithi_number=confirmed_tithi,
                     )

@@ -6,11 +6,12 @@ the rest of this project uses. An eclipse depends on the Moon's ecliptic
 which none of the rashi/nakshatra/tithi machinery elsewhere in this
 project touches at all.
 
-Uses SEFLG_SWIEPH directly (not the Moshier auto-fallback pattern used
-elsewhere) because eclipse timing needs the real ephemeris; Moshier's
-approximation is not precise enough for this and swisseph's eclipse
-functions are documented against the real data files. Requires the
-files in EPHE_DIR to cover whatever era is being searched.
+Requests SEFLG_SWIEPH (the real data files) because eclipse timing is
+sensitive to the Moon's position. But swisseph silently falls back to its
+Moshier model wherever EPHE_DIR has no data file for the era -- and
+ephe/download.sh currently fetches only BCE files -- so CE-era eclipses
+are in fact computed with Moshier. Each Eclipse records which model was
+actually used (ephemeris_model), so results can be weighed accordingly.
 """
 
 from dataclasses import dataclass
@@ -18,22 +19,29 @@ from dataclasses import dataclass
 import swisseph as swe
 
 from starcharts.ephemeris import EPHE_DIR  # noqa: F401 (ensures ephe path is set)
+from starcharts.ephemeris import model_from_flags
 
 
 @dataclass(frozen=True)
 class Eclipse:
     jd_max: float
     kind: str  # "solar" or "lunar"
+    ephemeris_model: str = "unknown"  # model swisseph actually used for the Moon at jd_max
+
+
+def _model_at(jd_ut: float) -> str:
+    _xx, flags = swe.calc_ut(jd_ut, swe.MOON, swe.FLG_SWIEPH)
+    return model_from_flags(flags)
 
 
 def _next_solar_eclipse(jd_ut: float) -> Eclipse:
     _res, tret = swe.sol_eclipse_when_glob(jd_ut, swe.FLG_SWIEPH, 0, False)
-    return Eclipse(jd_max=tret[0], kind="solar")
+    return Eclipse(jd_max=tret[0], kind="solar", ephemeris_model=_model_at(tret[0]))
 
 
 def _next_lunar_eclipse(jd_ut: float) -> Eclipse:
     _res, tret = swe.lun_eclipse_when(jd_ut, swe.FLG_SWIEPH, 0, False)
-    return Eclipse(jd_max=tret[0], kind="lunar")
+    return Eclipse(jd_max=tret[0], kind="lunar", ephemeris_model=_model_at(tret[0]))
 
 
 def find_eclipses_in_range(jd_start: float, jd_end: float) -> list[Eclipse]:

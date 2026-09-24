@@ -1,9 +1,10 @@
 """Amanta lunar month (masa) lookup -- best-effort, modern-convention only.
 
 CAVEAT (see WORKPLAN.md): this uses the *modern* amanta rule -- a masa
-takes the name of the sidereal rashi the Sun occupies at the Amavasya that
-starts it, and it's "adhika" (intercalary) if the Sun doesn't change rashi
-before the next Amavasya. That rule postdates the Siddhantic calendrical
+takes the name of the sidereal rashi the Sun enters during it (its
+sankranti); it's "adhika" (intercalary) if the Sun doesn't change rashi
+before the next Amavasya, and then takes the name of the month that
+follows it; and it's "kshaya" if the Sun changes rashi twice. That rule postdates the Siddhantic calendrical
 reforms (~5th century CE, Aryabhata/Varahamihira). Earlier intercalation
 (e.g. Vedanga Jyotisha's 5-year yuga cycle) used different, mean-motion-
 based rules. Treat a masa/paksha name match on a pre-500 CE candidate as
@@ -43,6 +44,12 @@ class Masa:
     amavasya_start_jd: float
     amavasya_end_jd: float
     is_adhika: bool
+    # A kshaya month contains two sankrantis, so one month name has no
+    # lunar month of its own. Conventions differ on which name the combined
+    # month carries; `name` keeps the second sankranti's month and
+    # `kshaya_other_name` records the first, so a caller can match either.
+    is_kshaya: bool = False
+    kshaya_other_name: str | None = None
 
 
 def _sun_rashi_index(jd_ut: float, ayanamsha: Ayanamsha) -> int:
@@ -64,19 +71,28 @@ def masa_at(jd_ut: float, ayanamsha: Ayanamsha = DEFAULT_AYANAMSHA) -> Masa:
 
     start_rashi = _sun_rashi_index(start_jd, ayanamsha)
     end_rashi = _sun_rashi_index(end_jd, ayanamsha)
-    is_adhika = start_rashi == end_rashi
+    sankrantis = (end_rashi - start_rashi) % 12
+    is_adhika = sankrantis == 0
+    is_kshaya = sankrantis == 2
 
-    # The masa is named after the rashi the Sun transits INTO during this
-    # lunar month (the sankranti falling inside it), not the rashi it
+    # A regular masa is named after the rashi the Sun transits INTO during
+    # this lunar month (the sankranti falling inside it), not the rashi it
     # starts in -- e.g. the 2024 lunar month from the Apr-9 new moon to
     # the May-8 new moon is Chaitra (Mesha) because the Sun enters Mesha
-    # on Apr 14, even though it started the month in Meena. When adhika
-    # (no sankranti inside), start_rashi == end_rashi so this is the same
-    # either way.
+    # on Apr 14, even though it started the month in Meena.
+    #
+    # An adhika month has no sankranti inside, and takes the name of the
+    # regular month that FOLLOWS it -- the one containing the Sun's entry
+    # into the next rashi. E.g. 2023's Jul 18 - Aug 16 month (Sun in Karka
+    # throughout) is Adhika Shravana, followed by Nija Shravana with the
+    # Simha sankranti -- not "Adhika Ashadha".
+    rashi_index = (end_rashi + 1) % 12 if is_adhika else end_rashi
     return Masa(
-        name=MASA_NAMES[end_rashi],
-        rashi_index=end_rashi,
+        name=MASA_NAMES[rashi_index],
+        rashi_index=rashi_index,
         amavasya_start_jd=start_jd,
         amavasya_end_jd=end_jd,
         is_adhika=is_adhika,
+        is_kshaya=is_kshaya,
+        kshaya_other_name=MASA_NAMES[(start_rashi + 1) % 12] if is_kshaya else None,
     )
