@@ -47,7 +47,7 @@
     ],
   };
 
-  function helio(name, T) {
+  function elements(name, T) {
     const [base, rate, extra] = ELEMENTS[name];
     const [a, e, I, L, varpi, Om] = base.map((v, i) => v + rate[i] * T);
     let M = L - varpi;
@@ -55,14 +55,11 @@
       const [b, c, s, f] = extra;
       M += b * T * T + c * Math.cos(f * T * D2R) + s * Math.sin(f * T * D2R);
     }
-    M = ((norm(M) + 180) % 360) - 180;
-    const Mr = M * D2R;
-    let E = Mr + e * Math.sin(Mr);
-    for (let k = 0; k < 8; k++) {
-      const dE = (E - e * Math.sin(E) - Mr) / (1 - e * Math.cos(E));
-      E -= dE;
-      if (Math.abs(dE) < 1e-10) break;
-    }
+    return { a, e, I, varpi, Om, M: ((norm(M) + 180) % 360) - 180 };
+  }
+
+  // Position on the orbit at eccentric anomaly E (radians), J2000 ecliptic.
+  function orbitPoint({ a, e, I, varpi, Om }, E) {
     const xp = a * (Math.cos(E) - e);
     const yp = a * Math.sqrt(1 - e * e) * Math.sin(E);
     const w = (varpi - Om) * D2R, O = Om * D2R, i = I * D2R;
@@ -73,6 +70,22 @@
       sw * si * xp + cw * si * yp,
     ];
   }
+
+  function helio(name, T) {
+    const el = elements(name, T);
+    const Mr = el.M * D2R, e = el.e;
+    let E = Mr + e * Math.sin(Mr);
+    for (let k = 0; k < 8; k++) {
+      const dE = (E - e * Math.sin(E) - Mr) / (1 - e * Math.cos(E));
+      E -= dE;
+      if (Math.abs(dE) < 1e-10) break;
+    }
+    return orbitPoint(el, E);
+  }
+
+  // Rotate a J2000-ecliptic vector so its longitude reads sidereal (Lahiri).
+  const COS_AY = Math.cos(LAHIRI_J2000 * D2R), SIN_AY = Math.sin(LAHIRI_J2000 * D2R);
+  const toSidereal = ([x, y, z]) => [x * COS_AY + y * SIN_AY, -x * SIN_AY + y * COS_AY, z];
 
   // General precession in longitude since J2000 (degrees).
   const precession = (T) => (5028.796195 * T + 1.1054348 * T * T) / 3600;
@@ -141,6 +154,24 @@
     return siderealAtTT(jdUt + deltaTDays(jdUt));
   }
 
+  const HELIO_BODIES = ["Budha", "Shukra", "Earth", "Mangala", "Guru", "Shani"];
+
+  /** Sun-centred positions (AU) in the sidereal ecliptic frame: x toward 0° Mesha, z to ecliptic north. */
+  function heliocentric(jdUt) {
+    const T = (jdUt + deltaTDays(jdUt) - J2000) / 36525;
+    const out = {};
+    for (const name of HELIO_BODIES) out[name] = toSidereal(helio(name, T));
+    return out;
+  }
+
+  /** n points around a body's current orbital ellipse, same frame as heliocentric(). */
+  function orbit(name, jdUt, n = 96) {
+    const el = elements(name, (jdUt + deltaTDays(jdUt) - J2000) / 36525);
+    const pts = [];
+    for (let k = 0; k < n; k++) pts.push(toSidereal(orbitPoint(el, (k / n) * 2 * Math.PI)));
+    return pts;
+  }
+
   /** Lahiri ayanamsha (degrees) at a UT Julian day. */
   function ayanamsha(jdUt) {
     return LAHIRI_J2000 + precession((jdUt + deltaTDays(jdUt) - J2000) / 36525);
@@ -187,7 +218,7 @@
   }
 
   const api = {
-    GRAHA_ORDER, LAHIRI_J2000, grahas, ayanamsha, deltaTDays,
+    GRAHA_ORDER, HELIO_BODIES, LAHIRI_J2000, grahas, heliocentric, orbit, ayanamsha, deltaTDays,
     jdToCalendar, calendarToJd, historicalToJd, jdToYearFloat, yearFloatToJd, norm,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;

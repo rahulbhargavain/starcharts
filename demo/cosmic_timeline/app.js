@@ -85,7 +85,7 @@
   }).sort((a, b) => a.jd - b.jd);
 
   // ---------- state ----------
-  const state = { jd: A.historicalToJd(-3300, 1, 1), playing: true, speed: 3, dir: 1, dragging: false, inertia: 0, view: "world" };
+  const state = { jd: A.historicalToJd(-3300, 1, 1), playing: true, speed: 3, dir: 1, dragging: false, inertia: 0, view: "world", skyView: "earth", zoom: "full", isoAz: -30, isoEl: 42 };
   const setJd = (jd) => { state.jd = clamp(jd, JD_MIN, JD_MAX); };
 
   // ---------- canvas helpers ----------
@@ -132,6 +132,9 @@
     const glow = g.createRadialGradient(c, c, 0, c, c, S * 0.5);
     glow.addColorStop(0, "rgba(60,80,190,0.20)"); glow.addColorStop(0.7, "rgba(40,50,140,0.08)"); glow.addColorStop(1, "rgba(0,0,0,0)");
     g.fillStyle = glow; g.fillRect(0, 0, S, S);
+    // the Sun-centred views reuse the starfield without the wheel
+    sky.stars = makeLayer(S, S, dpr);
+    blit(sky.stars.ctx, L);
 
     const rN0 = S * 0.445, rN1 = S * 0.49, rR0 = S * 0.395;
     // rings
@@ -263,6 +266,188 @@
         ctx.fillText(G.abbr, lx + (name === "Rahu" || name === "Ketu" ? 0 : s + 9) * (lx < c ? -1 : 1) * (name === "Rahu" || name === "Ketu" ? 0 : 1), ly - (name === "Rahu" || name === "Ketu" ? 0 : s + 5));
       }
     }
+  }
+
+  // ---------- Sun-centred views (top-down and isometric) ----------
+  // Both share one projection: "sun" is the isometric one seen from straight
+  // above (elevation 90°), which lines up with the wheel's orientation.
+  const HELIO = {
+    Budha: { ...GRAHA.Budha, mm: 4.09 },
+    Shukra: { ...GRAHA.Shukra, mm: 1.6 },
+    Earth: { label: "Earth", abbr: "Earth", color: "#5aa9ff", size: 5.5, mm: 0.986 },
+    Mangala: { ...GRAHA.Mangala, mm: 0.524 },
+    Guru: { ...GRAHA.Guru, mm: 0.0831 },
+    Shani: { ...GRAHA.Shani, mm: 0.0335 },
+  };
+  const ZOOM_AU = { inner: 1.75, full: 10.3 };
+  const ISO_Z_EXAGGERATION = 4;
+  const orbitCache = { key: null, orbits: null };
+
+  function helioCamera() {
+    const iso = state.skyView === "iso";
+    const el = (iso ? state.isoEl : 90) * D2R, az = (iso ? state.isoAz : 0) * D2R;
+    const { S, c } = sky;
+    const ringR = S * (iso ? 0.42 : 0.4);
+    const k = (ringR * 0.97) / ZOOM_AU[state.zoom];
+    const cy = iso ? c + S * 0.02 : c;
+    const ca = Math.cos(az), sa = Math.sin(az), se = Math.sin(el), ce = Math.cos(el);
+    // world units are screen pixels before tilting; returns [sx, sy, depth]
+    const P = (x, y, z) => {
+      const u = x * ca - y * sa, v = x * sa + y * ca;
+      return [c - u, cy + v * se - z * ce, v * ce + z * se];
+    };
+    const au = ([x, y, z]) => P(x * k, y * k, iso ? z * k * ISO_Z_EXAGGERATION : 0);
+    const onRing = (lon, r) => P(r * Math.cos(lon * D2R), r * Math.sin(lon * D2R), 0);
+    return { iso, P, au, onRing, ringR, k, cy };
+  }
+
+  function ringPath(ctx, cam, r, from = 0, to = 360, steps = 120) {
+    for (let i = 0; i <= steps; i++) {
+      const [x, y] = cam.onRing(from + (to - from) * (i / steps), r);
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+  }
+
+  function drawHelio(pos) {
+    const { ctx, S } = sky;
+    const cam = helioCamera(), { ringR, iso } = cam;
+    const rOut = ringR + S * 0.055, rNak = rOut + S * 0.025;
+    ctx.clearRect(0, 0, S, S);
+    blit(ctx, sky.stars);
+
+    // ecliptic plane
+    ctx.beginPath(); ringPath(ctx, cam, ringR); ctx.closePath();
+    ctx.fillStyle = iso ? "rgba(90,110,230,0.07)" : "rgba(90,110,230,0.03)"; ctx.fill();
+    // rashi band
+    for (let i = 0; i < 12; i++) {
+      ctx.beginPath(); ringPath(ctx, cam, rOut, i * 30, i * 30 + 30, 12); ringPath(ctx, cam, ringR, i * 30 + 30, i * 30, 12); ctx.closePath();
+      ctx.fillStyle = i % 2 ? "rgba(120,140,255,0.07)" : "rgba(224,169,64,0.07)"; ctx.fill();
+      const [x0, y0] = cam.onRing(i * 30, ringR * 0.04), [x1, y1] = cam.onRing(i * 30, rNak);
+      ctx.strokeStyle = "rgba(150,165,240,0.13)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    }
+    ctx.strokeStyle = "rgba(150,165,240,0.45)";
+    for (const r of [ringR, rOut]) { ctx.beginPath(); ringPath(ctx, cam, r); ctx.stroke(); }
+    for (let i = 0; i < 27; i++) {
+      const [x0, y0] = cam.onRing(i * (360 / 27), rOut), [x1, y1] = cam.onRing(i * (360 / 27), rNak);
+      ctx.strokeStyle = "rgba(150,165,240,0.3)"; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    }
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    for (let i = 0; i < 12; i++) {
+      const [x, y, d] = cam.onRing(i * 30 + 15, (ringR + rOut) / 2);
+      const near = iso ? clamp(0.75 + d / (ringR * 2), 0.55, 1.05) : 1;
+      ctx.font = `600 ${Math.max(9.5, S * 0.032 * near)}px "Cormorant Garamond"`;
+      ctx.fillStyle = `rgba(240,225,190,${0.55 + 0.4 * near})`;
+      ctx.fillText(RASHIS[i], x, y);
+    }
+    // equinox marker, as on the wheel
+    {
+      const eqLon = A.norm(-A.ayanamsha(state.jd));
+      const [x0, y0] = cam.onRing(eqLon, ringR * 0.04), [x1, y1] = cam.onRing(eqLon, rNak);
+      ctx.strokeStyle = "rgba(127,224,255,0.55)"; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+      ctx.fillStyle = "#7fe0ff"; ctx.beginPath(); ctx.arc(x1, y1, 3, 0, TAU); ctx.fill();
+    }
+
+    // where each graha appears from Earth: ticks on the outer ring
+    for (const name of TABLE_ORDER) {
+      if (name === "Rahu" || name === "Ketu") continue;
+      const [x0, y0] = cam.onRing(pos[name], rOut), [x1, y1] = cam.onRing(pos[name], rNak + 4);
+      ctx.strokeStyle = rgba(GRAHA[name].color, 0.95); ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    }
+
+    // the inner zoom crops Jupiter and Saturn at the ring
+    ctx.save();
+    if (state.zoom === "inner") { ctx.beginPath(); ringPath(ctx, cam, ringR); ctx.closePath(); ctx.clip(); }
+
+    const okey = `${state.zoom}:${Math.round(state.jd / 3652)}`;
+    if (orbitCache.key !== okey) {
+      orbitCache.key = okey;
+      orbitCache.orbits = Object.fromEntries(A.HELIO_BODIES.map((n) => [n, A.orbit(n, state.jd)]));
+    }
+    for (const name of A.HELIO_BODIES) {
+      ctx.strokeStyle = rgba(HELIO[name].color, name === "Earth" ? 0.45 : 0.3); ctx.lineWidth = 1;
+      ctx.beginPath();
+      orbitCache.orbits[name].forEach((p, i) => { const [x, y] = cam.au(p); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+      ctx.closePath(); ctx.stroke();
+    }
+
+    // trails
+    const helio = A.heliocentric(state.jd);
+    const span = trailDays(), N = 20;
+    const samples = [];
+    for (let k = N; k >= 1; k--) samples.push(A.heliocentric(state.jd - state.dir * span * (k / N)));
+    ctx.lineCap = "round";
+    for (const name of A.HELIO_BODIES) {
+      const H_ = HELIO[name];
+      if (H_.mm * span > 300) continue;
+      for (let k = 1; k <= N; k++) {
+        const [x0, y0] = cam.au(samples[k - 1][name]), [x1, y1] = cam.au(k < N ? samples[k][name] : helio[name]);
+        ctx.strokeStyle = rgba(H_.color, 0.08 + 0.6 * (k / N) ** 2); ctx.lineWidth = 1 + 2.2 * (k / N);
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+      }
+    }
+
+    // sight lines from Earth, parallel to the ring ticks
+    const E = cam.au(helio.Earth);
+    for (const name of ["Budha", "Shukra", "Mangala", "Guru", "Shani"]) {
+      const [x, y] = cam.au(helio[name]);
+      ctx.strokeStyle = rgba(HELIO[name].color, 0.22); ctx.lineWidth = 1; ctx.setLineDash([3, 4]);
+      ctx.beginPath(); ctx.moveTo(E[0], E[1]); ctx.lineTo(x, y); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    {
+      const [sx, sy] = cam.P(0, 0, 0);
+      ctx.strokeStyle = "rgba(255,201,77,0.22)"; ctx.setLineDash([3, 4]);
+      ctx.beginPath(); ctx.moveTo(E[0], E[1]); ctx.lineTo(sx, sy); ctx.stroke(); ctx.setLineDash([]);
+    }
+
+    // Sun + bodies, far to near
+    const bodies = A.HELIO_BODIES.map((name) => ({ name, p: helio[name], s: cam.au(helio[name]) }));
+    const sun = { name: "Sun", s: cam.P(0, 0, 0) };
+    const order = [...bodies, sun].sort((a, b) => a.s[2] - b.s[2]);
+    const scale = S / 440;
+    for (const b of order) {
+      const [x, y] = b.s;
+      if (b.name === "Sun") {
+        const r = 11 * scale;
+        const g1 = ctx.createRadialGradient(x, y, 0, x, y, r * 4);
+        g1.addColorStop(0, "rgba(255,214,110,0.9)"); g1.addColorStop(0.25, "rgba(255,180,60,0.35)"); g1.addColorStop(1, "rgba(255,160,40,0)");
+        ctx.fillStyle = g1; ctx.beginPath(); ctx.arc(x, y, r * 4, 0, TAU); ctx.fill();
+        ctx.fillStyle = "#ffd76a"; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+        continue;
+      }
+      const H_ = HELIO[b.name];
+      if (iso) {
+        // drop line to the ecliptic plane shows ecliptic latitude
+        const [px, py] = cam.au([b.p[0], b.p[1], 0]);
+        ctx.strokeStyle = rgba(H_.color, 0.45); ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(x, y); ctx.stroke();
+        ctx.fillStyle = rgba(H_.color, 0.5); ctx.beginPath(); ctx.ellipse(px, py, 2.5, 1.2, 0, 0, TAU); ctx.fill();
+      }
+      const s = H_.size * scale;
+      const gl = ctx.createRadialGradient(x, y, 0, x, y, s * 3);
+      gl.addColorStop(0, rgba(H_.color, 0.85)); gl.addColorStop(1, rgba(H_.color, 0));
+      ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(x, y, s * 3, 0, TAU); ctx.fill();
+      ctx.fillStyle = H_.color; ctx.beginPath(); ctx.arc(x, y, s, 0, TAU); ctx.fill();
+      if (b.name === "Earth") {
+        // Moon (distance not to scale) and the lunar nodal axis
+        const ex = b.p[0] * cam.k, ey = b.p[1] * cam.k, mr = 13 * scale;
+        const [mx, my] = cam.P(ex + mr * Math.cos(pos.Chandra * D2R), ey + mr * Math.sin(pos.Chandra * D2R), 0);
+        ctx.fillStyle = GRAHA.Chandra.color; ctx.beginPath(); ctx.arc(mx, my, 2.3 * scale, 0, TAU); ctx.fill();
+        for (const [node, col] of [["Rahu", GRAHA.Rahu.color], ["Ketu", GRAHA.Ketu.color]]) {
+          const [nx, ny] = cam.P(ex + 20 * scale * Math.cos(pos[node] * D2R), ey + 20 * scale * Math.sin(pos[node] * D2R), 0);
+          ctx.strokeStyle = rgba(col, 0.55); ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(nx, ny); ctx.stroke();
+          ctx.fillStyle = col; ctx.beginPath(); ctx.arc(nx, ny, 1.8 * scale, 0, TAU); ctx.fill();
+        }
+      }
+      ctx.font = `500 ${Math.max(8, S * 0.022)}px "IBM Plex Mono"`;
+      ctx.fillStyle = rgba(H_.color, 0.95);
+      ctx.fillText(H_.abbr, x, y - s - 9);
+    }
+    ctx.restore();
   }
 
   // ---------- map ----------
@@ -640,6 +825,61 @@
     };
   }
 
+  // sky view tabs
+  const SKY_VIEWS = {
+    earth: { sub: "Lahiri · geocentric", label: "Zodiac wheel with Earth at the centre, showing the nine grahas",
+      caption: "Earth at the centre: each graha where it appears against the sidereal zodiac." },
+    sun: { sub: "Lahiri · heliocentric", label: "Solar system seen from above the ecliptic, Sun at the centre",
+      caption: "Sun at the centre, seen from above; orbits to scale. Coloured ticks on the ring mark each graha as seen from Earth, along the dashed sight lines." },
+    iso: { sub: "Lahiri · heliocentric", label: "Tilted view of the solar system, Sun at the centre",
+      caption: "Tilted Sun-centred view. Drag to rotate. Ecliptic latitudes are exaggerated ×4 so the orbital tilts show; stalks drop to the ecliptic plane." },
+  };
+  const skyTabs = [...$("sky-tabs").children];
+  function setSkyView(v) {
+    state.skyView = v;
+    for (const t of skyTabs) {
+      const on = t.dataset.sky === v;
+      t.setAttribute("aria-selected", String(on)); t.tabIndex = on ? 0 : -1;
+    }
+    setText($("sky-sub"), SKY_VIEWS[v].sub);
+    setText($("sky-caption"), SKY_VIEWS[v].caption);
+    sky.cv.setAttribute("aria-label", SKY_VIEWS[v].label);
+    $("zooms").hidden = v === "earth";
+    sky.cv.style.cursor = v === "iso" ? "grab" : "";
+  }
+  skyTabs.forEach((t, i) => {
+    t.onclick = () => setSkyView(t.dataset.sky);
+    t.onkeydown = (e) => {
+      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+      e.preventDefault(); e.stopPropagation();
+      const next = skyTabs[(i + (e.key === "ArrowRight" ? 1 : skyTabs.length - 1)) % skyTabs.length];
+      next.focus(); setSkyView(next.dataset.sky);
+    };
+  });
+  for (const b of $("zooms").children) {
+    b.onclick = () => {
+      state.zoom = b.dataset.zoom;
+      for (const o of $("zooms").children) o.setAttribute("aria-pressed", String(o === b));
+    };
+  }
+  {
+    let drag = null;
+    sky.cv.addEventListener("pointerdown", (e) => {
+      if (state.skyView !== "iso") return;
+      drag = { x: e.clientX, y: e.clientY, az: state.isoAz, el: state.isoEl };
+      sky.cv.setPointerCapture(e.pointerId); sky.cv.style.cursor = "grabbing";
+    });
+    sky.cv.addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      state.isoAz = drag.az - (e.clientX - drag.x) * 0.4;
+      state.isoEl = clamp(drag.el + (e.clientY - drag.y) * 0.3, 8, 90);
+    });
+    const end = () => { if (drag) { drag = null; sky.cv.style.cursor = "grab"; } };
+    sky.cv.addEventListener("pointerup", end);
+    sky.cv.addEventListener("pointercancel", end);
+  }
+  setSkyView(state.skyView);
+
   document.addEventListener("keydown", (e) => {
     if (e.target.tagName === "SELECT" || e.target.tagName === "INPUT") return;
     if (e.code === "Space") { e.preventDefault(); playBtn.click(); }
@@ -731,7 +971,7 @@
       if (state.jd >= JD_MAX || state.jd <= JD_MIN) setPlaying(false);
     }
     const pos = A.grahas(state.jd), year = A.jdToYearFloat(state.jd);
-    drawSky(pos);
+    if (state.skyView === "earth") drawSky(pos); else drawHelio(pos);
     drawMap(year);
     drawTimeline(year);
     drawTape();

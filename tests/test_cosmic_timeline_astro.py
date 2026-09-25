@@ -69,3 +69,28 @@ def test_js_calendar_round_trips_across_julian_gregorian_switch():
     for (jd, y, m, d), (ey, em, ed, cal) in zip(results, expected, strict=True):
         assert (y, m, d) == (ey, em, ed)
         assert jd == pytest.approx(swe.julday(ey, em, ed, 0.0, cal))
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_js_heliocentric_frame_agrees_with_geocentric_longitudes():
+    # The Sun-centred views draw sight lines from Earth to each planet and
+    # tick the ring at the geocentric longitude; both must be the same angle.
+    script = (
+        "const A = require(process.argv[1]);"
+        "const out = [];"
+        "for (let y = -3000; y <= 2100; y += 250) {"
+        "  const jd = A.historicalToJd(y < 1 ? y - 1 : y, 3, 1);"
+        "  const h = A.heliocentric(jd), g = A.grahas(jd);"
+        "  const lon = (v) => A.norm(Math.atan2(v[1], v[0]) * 180 / Math.PI);"
+        "  out.push([A.norm(lon(h.Earth) + 180) - g.Surya]);"
+        "  for (const k of ['Budha', 'Shukra', 'Mangala', 'Guru', 'Shani'])"
+        "    out[out.length - 1].push(lon(h[k].map((v, i) => v - h.Earth[i])) - g[k]);"
+        "}"
+        "console.log(JSON.stringify(out));"
+    )
+    out = subprocess.run(
+        ["node", "-e", script, str(ASTRO_JS)], capture_output=True, text=True, check=True
+    ).stdout
+    for row in json.loads(out):
+        for diff in row:
+            assert abs((diff + 540) % 360 - 180) < 1e-6

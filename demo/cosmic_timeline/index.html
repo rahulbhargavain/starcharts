@@ -49,6 +49,12 @@
   #map{width:100%;aspect-ratio:1.9/1;display:block;border-radius:10px;cursor:crosshair;}
   @media (max-width:600px){#map{aspect-ratio:1.45/1;}}
 
+  .sky-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
+  .seg button[aria-selected="true"]{background:#e0a94022;color:#f3cf8a;}
+  .sky-caption-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-top:4px;}
+  #sky-caption{margin:0;font-size:12px;line-height:1.45;color:var(--text-dim);min-height:3em;}
+  #zooms{flex-shrink:0;}
+  #zooms[hidden]{display:none;}
   .sky-facts{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px;}
   .pill{font-size:11.5px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--text-dim);white-space:nowrap;}
   .pill b{color:var(--text);font-weight:500;}
@@ -120,8 +126,22 @@
 
   <div class="grid">
     <section class="panel" aria-label="Sidereal sky">
-      <h2>Sidereal sky <small>Lahiri · geocentric</small></h2>
-      <canvas id="sky" role="img" aria-label="Zodiac wheel showing the nine grahas"></canvas>
+      <div class="sky-head">
+        <h2 style="margin:0">Sidereal sky <small id="sky-sub">Lahiri · geocentric</small></h2>
+        <div class="seg" id="sky-tabs" role="tablist" aria-label="Sky perspective">
+          <button role="tab" data-sky="earth" aria-selected="true" aria-controls="sky">Earth</button>
+          <button role="tab" data-sky="sun" aria-selected="false" aria-controls="sky" tabindex="-1">Sun</button>
+          <button role="tab" data-sky="iso" aria-selected="false" aria-controls="sky" tabindex="-1">Isometric</button>
+        </div>
+      </div>
+      <canvas id="sky" role="img" aria-label="Zodiac wheel with Earth at the centre, showing the nine grahas" style="touch-action:none"></canvas>
+      <div class="sky-caption-row">
+        <p id="sky-caption"></p>
+        <div class="seg" id="zooms" role="group" aria-label="Orbit zoom" hidden>
+          <button data-zoom="inner" aria-pressed="false">Inner</button>
+          <button data-zoom="full" aria-pressed="true">Full</button>
+        </div>
+      </div>
       <div class="sky-facts" id="sky-facts"></div>
       <table class="grahas"><tbody id="graha-rows"></tbody></table>
     </section>
