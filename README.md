@@ -7,6 +7,10 @@ this." Corrects for precession, ayanamsha, and calendar conversion
 explicitly, and reports a ranked list of candidates with their match
 quality rather than a single answer.
 
+**Live demo:** [Cosmic Timeline](https://rahulbhargavain.github.io/starcharts/cosmic_timeline/)
+— the sidereal sky and the rise and fall of civilizations, 3500 BCE to
+today ([all demos](https://rahulbhargavain.github.io/starcharts/)).
+
 ## What it does
 
 1. **Ephemeris + ayanamsha** — real planetary positions for any date
@@ -22,14 +26,15 @@ quality rather than a single answer.
    with the information needed to judge how much to trust it.
 5. **Visualization** — a North-Indian kundali SVG renderer and an
    interactive HTML explorer built on real search output.
-6. **Cosmic timeline** (`demo/cosmic_timeline/`) — a playable sidereal
+6. **Cosmic timeline** ([live](https://rahulbhargavain.github.io/starcharts/cosmic_timeline/),
+   source in `demo/cosmic_timeline/`) — a playable sidereal
    sky (Earth-centred wheel, Sun-centred orbits, or a tilted isometric
    view) next to a world map of civilizations rising and falling,
    3500 BCE to today. Static files, no build step; planet positions are
    computed in the browser (within ~0.5° of the Swiss Ephemeris, see
    `tests/test_cosmic_timeline_astro.py`). Serve it with
    `python -m http.server --directory demo` and open
-   `/cosmic_timeline/`.
+   `/cosmic_timeline/` to run it locally.
 
 ## Setup
 
