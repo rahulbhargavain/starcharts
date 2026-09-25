@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cosmic Timeline</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --bg:#070a18;
+    --panel:#0e1330cc;
+    --panel-solid:#0e1330;
+    --line:#26306a;
+    --line-soft:#1a2150;
+    --text:#eee7d6;
+    --text-dim:#98a1cc;
+    --text-faint:#5f6899;
+    --accent:#e0a940;
+    --mono:"IBM Plex Mono", ui-monospace, monospace;
+    --serif:"Cormorant Garamond", Georgia, serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--bg);color:var(--text);}
+  body{
+    font-family:"IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size:14px;
+    min-height:100vh;
+    background:
+      radial-gradient(1200px 700px at 20% -10%, #1b2260 0%, transparent 60%),
+      radial-gradient(900px 600px at 110% 20%, #2a1440 0%, transparent 55%),
+      var(--bg);
+  }
+  .wrap{max-width:1360px;margin:0 auto;padding:18px 16px 28px;display:flex;flex-direction:column;gap:14px;}
+
+  header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;}
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(26px,3.4vw,36px);margin:0;letter-spacing:.01em;}
+  .tagline{color:var(--text-dim);font-size:13px;margin-top:2px;max-width:620px;line-height:1.5;}
+  .clock{text-align:right;}
+  #date{font-family:var(--serif);font-weight:600;font-size:clamp(28px,4.2vw,44px);line-height:1;letter-spacing:.01em;font-variant-numeric:tabular-nums;}
+  #date-sub{font-family:var(--mono);font-size:11.5px;color:var(--text-dim);margin-top:6px;}
+
+  .grid{display:grid;grid-template-columns:minmax(300px,440px) 1fr;gap:14px;}
+  @media (max-width:900px){.grid{grid-template-columns:1fr;} .clock{text-align:left;}}
+  .panel{background:var(--panel);border:1px solid var(--line-soft);border-radius:16px;padding:14px;backdrop-filter:blur(6px);min-width:0;}
+  .panel h2{font-family:var(--serif);font-weight:600;font-size:18px;margin:0 0 8px;display:flex;justify-content:space-between;align-items:center;gap:8px;}
+  .panel h2 small{font-family:"IBM Plex Sans",sans-serif;font-weight:400;font-size:11.5px;color:var(--text-faint);}
+
+  #sky{width:100%;aspect-ratio:1/1;display:block;}
+  #map{width:100%;aspect-ratio:1.9/1;display:block;border-radius:10px;cursor:crosshair;}
+  @media (max-width:600px){#map{aspect-ratio:1.45/1;}}
+
+  .sky-facts{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px;}
+  .pill{font-size:11.5px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--text-dim);white-space:nowrap;}
+  .pill b{color:var(--text);font-weight:500;}
+  .pill.hot{border-color:#e0a94088;color:#f3cf8a;box-shadow:0 0 12px #e0a94033;}
+
+  table.grahas{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums;}
+  table.grahas td{padding:3px 4px;border-top:1px solid var(--line-soft);white-space:nowrap;}
+  table.grahas td.deg,table.grahas td.nak{font-family:var(--mono);font-size:11.5px;color:var(--text-dim);}
+  table.grahas td.retro{color:#ff9d8a;font-family:var(--mono);font-size:11px;}
+  .sw{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px;}
+
+  .map-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+  .seg button{border:0;border-radius:0;background:transparent;padding:5px 10px;}
+  .seg button+button{border-left:1px solid var(--line);}
+  .seg button[aria-pressed="true"]{background:#e0a94022;color:#f3cf8a;}
+
+  .below-map{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;}
+  @media (max-width:700px){.below-map{grid-template-columns:1fr;}}
+  .card{border:1px solid var(--line-soft);border-radius:12px;padding:10px 12px;min-height:84px;}
+  .card .label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint);margin-bottom:4px;}
+  .card .ev-title{font-family:var(--serif);font-size:19px;font-weight:600;line-height:1.2;}
+  .card .ev-meta{font-family:var(--mono);font-size:11px;color:var(--text-dim);margin:3px 0 4px;}
+  .card .ev-desc{font-size:12.5px;color:var(--text-dim);line-height:1.45;}
+  .card .next{margin-top:6px;font-size:12px;color:var(--text-faint);}
+  .card .next button{padding:2px 8px;font-size:11.5px;margin-left:4px;}
+  .chips{display:flex;flex-wrap:wrap;gap:5px;}
+  .chip{font-size:11.5px;padding:2px 8px;border-radius:999px;background:#ffffff08;border:1px solid;}
+
+  .legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11.5px;color:var(--text-dim);margin-top:10px;}
+  .legend span{display:inline-flex;align-items:center;gap:5px;}
+
+  .controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  button, select{
+    font:500 13px "IBM Plex Sans",sans-serif;background:#161c45;color:var(--text);
+    border:1px solid var(--line);border-radius:9px;padding:6px 11px;cursor:pointer;
+  }
+  button:hover, select:hover{border-color:var(--accent);}
+  button:focus-visible, select:focus-visible, canvas:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  #play{min-width:84px;background:#e0a940;color:#1a1405;border-color:#e0a940;font-weight:600;}
+  #play:hover{filter:brightness(1.1);}
+  select{max-width:100%;}
+  .spacer{flex:1;}
+
+  #tape{width:100%;height:46px;display:block;cursor:ew-resize;touch-action:none;border-radius:10px;margin-top:10px;}
+  #timeline{width:100%;display:block;cursor:pointer;touch-action:none;margin-top:10px;}
+
+  #tip{position:fixed;pointer-events:none;z-index:10;background:#0b0f28f0;border:1px solid var(--line);border-radius:8px;
+       padding:6px 9px;font-size:12px;max-width:260px;line-height:1.4;display:none;box-shadow:0 6px 24px #0008;}
+  #tip b{font-weight:600;}
+  #tip .m{font-family:var(--mono);font-size:11px;color:var(--text-dim);}
+
+  footer{color:var(--text-faint);font-size:11.5px;line-height:1.5;}
+  footer kbd{font-family:var(--mono);border:1px solid var(--line);border-radius:4px;padding:0 4px;font-size:10.5px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Cosmic Timeline</h1>
+      <div class="tagline">The sidereal sky and the rise and fall of civilizations, 3500 BCE to today. Scrub the time tape, play through the millennia, and watch the equinox slide backwards through the nakshatras.</div>
+    </div>
+    <div class="clock">
+      <div id="date" aria-live="off">—</div>
+      <div id="date-sub">—</div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="panel" aria-label="Sidereal sky">
+      <h2>Sidereal sky <small>Lahiri · geocentric</small></h2>
+      <canvas id="sky" role="img" aria-label="Zodiac wheel showing the nine grahas"></canvas>
+      <div class="sky-facts" id="sky-facts"></div>
+      <table class="grahas"><tbody id="graha-rows"></tbody></table>
+    </section>
+
+    <section class="panel" aria-label="World map">
+      <div class="map-head">
+        <h2 style="margin:0">Civilizations <small id="civ-count"></small></h2>
+        <div class="seg" id="views" role="group" aria-label="Map region">
+          <button data-view="world" aria-pressed="true">World</button>
+          <button data-view="oldworld" aria-pressed="false">Old World</button>
+          <button data-view="americas" aria-pressed="false">Americas</button>
+        </div>
+      </div>
+      <canvas id="map" role="img" aria-label="Map of civilizations at the current date"></canvas>
+      <div class="legend" id="legend"></div>
+      <div class="below-map">
+        <div class="card" id="event-card"></div>
+        <div class="card"><div class="label">Flourishing now</div><div class="chips" id="active-civs"></div></div>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel" aria-label="Time controls">
+    <div class="controls">
+      <button id="to-start" title="Go to start" aria-label="Go to start">⏮</button>
+      <button id="step-back" title="Step back (←)" aria-label="Step back">◀</button>
+      <button id="play" aria-label="Play">▶ Play</button>
+      <button id="step-fwd" title="Step forward (→)" aria-label="Step forward">▶</button>
+      <button id="reverse" title="Reverse direction (R)" aria-pressed="false">⇄ Reverse</button>
+      <div class="seg" id="speeds" role="group" aria-label="Playback speed"></div>
+      <div class="spacer"></div>
+      <select id="jump" aria-label="Jump to event"></select>
+    </div>
+    <canvas id="tape" tabindex="0" aria-label="Time tape. Drag to scrub; arrow keys step."></canvas>
+    <canvas id="timeline" aria-label="Timeline of civilizations and events. Click or drag to set the date."></canvas>
+  </section>
+
+  <footer>
+    Planet positions are computed in the browser from JPL Keplerian elements and a truncated lunar theory, within about half a degree of the Swiss Ephemeris over this range. Civilization extents are schematic glows over conventional textbook dates, not borders. Dates before 1582 use the proleptic Julian calendar.
+    <kbd>Space</kbd> play/pause · <kbd>←</kbd><kbd>→</kbd> step (<kbd>Shift</kbd> ×10) · <kbd>R</kbd> reverse
+  </footer>
+</div>
+<div id="tip"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/d3-array@3/dist/d3-array.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-geo@3/dist/d3-geo.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+<script src="astro.js"></script>
+<script src="history.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

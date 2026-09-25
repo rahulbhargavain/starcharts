@@ -22,6 +22,13 @@ quality rather than a single answer.
    with the information needed to judge how much to trust it.
 5. **Visualization** — a North-Indian kundali SVG renderer and an
    interactive HTML explorer built on real search output.
+6. **Cosmic timeline** (`demo/cosmic_timeline/`) — a playable sidereal
+   sky wheel next to a world map of civilizations rising and falling,
+   3500 BCE to today. Static files, no build step; planet positions are
+   computed in the browser (within ~0.5° of the Swiss Ephemeris, see
+   `tests/test_cosmic_timeline_astro.py`). Serve it with
+   `python -m http.server --directory demo` and open
+   `/cosmic_timeline/`.
 
 ## Setup
 
