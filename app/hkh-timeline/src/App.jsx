@@ -19,12 +19,15 @@ export default function App() {
           </div>
         </div>
         <div className="clock">
+          {/* icon last: pinned to the fixed right edge of the header via
+              justify-content:space-between, so it never shifts as the date
+              text (a varying number of digits) changes width */}
           <div className="clock-row">
-            <canvas id="sky-mini" width="34" height="34" title="The sidereal sky right now (Sun and visible planets, understated)" />
             <div>
               <div id="date">—</div>
               <div id="date-sub">—</div>
             </div>
+            <canvas id="sky-mini" width="34" height="34" title="The sidereal sky right now (Sun and visible planets, understated)" />
           </div>
         </div>
       </header>
@@ -53,7 +56,17 @@ export default function App() {
 
         <section className="panel" aria-label="Calendars">
           <div className="head">
-            <h2>Calendars</h2>
+            <h2>
+              Calendars
+              <span className="mini-row" title="Moon phase (lunar)">
+                <canvas id="moon-mini" width="26" height="26" />
+              </span>
+              <span className="seg mini-transport" role="group" aria-label="Time controls">
+                <button id="step-back-mini" title="Step back (←)" aria-label="Step back">◀</button>
+                <button id="play-mini" aria-label="Play">▶</button>
+                <button id="step-fwd-mini" title="Step forward (→)" aria-label="Step forward">▶</button>
+              </span>
+            </h2>
             <select id="cal-mode" aria-label="Group calendars by" defaultValue="type">
               <option value="type">By type (solar / lunisolar / lunar)</option>
               <option value="country">By country</option>

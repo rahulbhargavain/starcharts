@@ -438,7 +438,7 @@ export function mountEngine() {
     const moonCv = $("moon-mini");
     if (!moonCv) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const size = moonCv.clientWidth || 26;
+    const size = 26; // fixed: see #moon-mini in style.css -- never read back clientWidth here
     if (moonCv.width !== size * dpr) { moonCv.width = size * dpr; moonCv.height = size * dpr; }
     const g = moonCv.getContext("2d");
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -459,49 +459,13 @@ export function mountEngine() {
     g.strokeStyle = "rgba(230,225,255,0.3)"; g.lineWidth = 1; g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.stroke();
   }
 
-  // ---------- seasonal (solar) mini: Earth around the Sun, three Indian seasons ----------
-  const SEASON_ARCS = [
-    { name: "Winter", from: 0, to: 90, color: "#7fb2ff" },      // ~Dec-Feb
-    { name: "Summer", from: 90, to: 195, color: "#ffb15e" },    // ~Mar-Jun
-    { name: "Monsoon", from: 195, to: 360, color: "#57c98a" },  // ~Jun-Nov
-  ];
-  function drawSeasonMini(jd) {
-    const seasonCv = $("season-mini");
-    if (!seasonCv) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const size = seasonCv.clientWidth || 34;
-    if (seasonCv.width !== size * dpr) { seasonCv.width = size * dpr; seasonCv.height = size * dpr; }
-    const g = seasonCv.getContext("2d");
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.clearRect(0, 0, size, size);
-    const cx = size / 2, cy = size / 2, rOrbit = size * 0.4, rSun = size * 0.09, rEarth = size * 0.055;
-    // day-of-year angle, 0 at the winter-solstice boundary used above
-    const c = A.jdToCalendar(jd);
-    const startOfYear = A.calendarToJd(c.year <= 0 ? c.year + 1 : c.year, 1, 1);
-    const doy = jd - startOfYear;
-    const angle = (doy / 365.2425) * 360;
-    const toXY = (deg, r) => [cx + r * Math.cos((deg - 90) * D2R), cy + r * Math.sin((deg - 90) * D2R)];
-    for (const s of SEASON_ARCS) {
-      g.strokeStyle = s.color; g.lineWidth = size * 0.09; g.lineCap = "butt";
-      g.beginPath(); g.arc(cx, cy, rOrbit, (s.from - 90) * D2R, (s.to - 90) * D2R); g.stroke();
-    }
-    g.fillStyle = "#ffd76a"; g.beginPath(); g.arc(cx, cy, rSun, 0, TAU); g.fill();
-    const [ex, ey] = toXY(angle, rOrbit);
-    // Earth as a small lit/shadow disc, shadow always facing away from the Sun
-    g.save(); g.beginPath(); g.arc(ex, ey, rEarth, 0, TAU); g.clip();
-    g.fillStyle = "#5aa9ff"; g.fillRect(ex - rEarth, ey - rEarth, rEarth * 2, rEarth * 2);
-    const toSun = Math.atan2(cy - ey, cx - ex);
-    g.fillStyle = "rgba(6,9,32,0.75)";
-    g.beginPath(); g.arc(ex, ey, rEarth, toSun + Math.PI / 2, toSun - Math.PI / 2); g.fill();
-    g.restore();
-  }
 
   // ---------- sky mini: understated Sun+Moon wheel ----------
   const skyCv = $("sky-mini");
   function drawSkyMini(jd) {
     if (!skyCv) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const size = skyCv.clientWidth || 34;
+    const size = 34; // fixed: see #sky-mini in style.css -- never read back clientWidth here
     if (skyCv.width !== size * dpr) { skyCv.width = size * dpr; skyCv.height = size * dpr; }
     const g = skyCv.getContext("2d");
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -554,9 +518,7 @@ export function mountEngine() {
     for (const grp of GROUP_ORDER) {
       const cals = visible.filter((c) => CAL_GROUP[c.id] === grp);
       if (!cals.length) continue;
-      const mini = grp === "solar" ? '<canvas id="season-mini" class="mini-inline" width="34" height="34"></canvas>'
-        : grp === "lunar" ? '<canvas id="moon-mini" class="mini-inline" width="26" height="26"></canvas>' : "";
-      html += `<div class="cal-group"><h3>${mini}${GROUP_LABEL[grp]}</h3>`;
+      html += `<div class="cal-group"><h3>${GROUP_LABEL[grp]}</h3>`;
       for (const cal of cals) html += calendarRow(cal, jd, astroYear);
       html += "</div>";
     }
@@ -567,7 +529,7 @@ export function mountEngine() {
     setText($("date"), fmtDate(state.jd));
     setText($("date-sub"), `${state.jd < 2299160.5 ? "Julian" : "Gregorian"} calendar · JD ${state.jd.toFixed(1)}`);
     setHTML($("calendars"), calendarsHTML(state.jd));
-    drawMoonMini(state.jd); drawSeasonMini(state.jd); drawSkyMini(state.jd);
+    drawMoonMini(state.jd); drawSkyMini(state.jd);
 
     let prev = null, next = null;
     for (const e of events) { if (e.jd <= state.jd + 0.5) prev = e; else { next = e; break; } }
@@ -640,15 +602,24 @@ export function mountEngine() {
   if ($("rows")) $("rows").addEventListener("click", (e) => { const tr = e.target.closest("[data-jump]"); if (tr) { jumpTo(+tr.dataset.jump); window.scrollTo({ top: 0, behavior: "smooth" }); } });
 
   // ---------- controls ----------
-  const playBtn = $("play");
+  // The Calendars panel's compact "-mini" trio mirrors these one-for-one, so
+  // both stay in sync however either is driven.
+  const playBtn = $("play"), playBtnMini = $("play-mini");
   function setPlaying(p) {
     state.playing = p;
     if (playBtn) { playBtn.textContent = p ? "❚❚ Pause" : "▶ Play"; playBtn.setAttribute("aria-label", p ? "Pause" : "Play"); }
+    if (playBtnMini) { playBtnMini.textContent = p ? "❚❚" : "▶"; playBtnMini.setAttribute("aria-label", p ? "Pause" : "Play"); }
   }
-  if (playBtn) playBtn.onclick = () => { if (!state.playing && state.jd >= JD_MAX) setJd(JD_MIN); setPlaying(!state.playing); };
+  const togglePlay = () => { if (!state.playing && state.jd >= JD_MAX) setJd(JD_MIN); setPlaying(!state.playing); };
+  if (playBtn) playBtn.onclick = togglePlay;
+  if (playBtnMini) playBtnMini.onclick = togglePlay;
   const stepDays = () => (SPEEDS[state.speed].auto ? 365.2425 : SPEEDS[state.speed].d);
-  if ($("step-back")) $("step-back").onclick = () => setJd(state.jd - stepDays());
-  if ($("step-fwd")) $("step-fwd").onclick = () => setJd(state.jd + stepDays());
+  const doStepBack = () => setJd(state.jd - stepDays());
+  const doStepFwd = () => setJd(state.jd + stepDays());
+  if ($("step-back")) $("step-back").onclick = doStepBack;
+  if ($("step-fwd")) $("step-fwd").onclick = doStepFwd;
+  if ($("step-back-mini")) $("step-back-mini").onclick = doStepBack;
+  if ($("step-fwd-mini")) $("step-fwd-mini").onclick = doStepFwd;
   if ($("speeds")) {
     SPEEDS.forEach((s, i) => {
       const b = document.createElement("button");
@@ -681,9 +652,9 @@ export function mountEngine() {
   }
   document.addEventListener("keydown", (e) => {
     if (["SELECT", "INPUT", "SUMMARY"].includes(e.target.tagName)) return;
-    if (e.code === "Space") { e.preventDefault(); playBtn?.click(); }
-    else if (e.key === "ArrowRight") { e.preventDefault(); $("step-fwd")?.click(); }
-    else if (e.key === "ArrowLeft") { e.preventDefault(); $("step-back")?.click(); }
+    if (e.code === "Space") { e.preventDefault(); togglePlay(); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); doStepFwd(); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); doStepBack(); }
   });
 
   // timeline scrub + hover, map hover

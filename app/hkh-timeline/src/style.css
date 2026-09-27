@@ -17,22 +17,39 @@ h1{font:600 clamp(26px,3.4vw,36px) var(--serif);margin:0;letter-spacing:.01em;}
 .tagline a{color:var(--text-dim);}
 .clock{text-align:right;}
 .clock-row{display:flex;align-items:center;gap:10px;}
-#sky-mini{flex:none;opacity:.85;}
+/* Explicit CSS size, not just the width/height attributes: engine.js resizes
+   those attributes (the canvas's backing store) to clientWidth * dpr each
+   draw. Without a fixed CSS size here, a canvas's on-page size *is* its
+   width/height attribute, so growing the attribute also grows clientWidth --
+   a runaway feedback loop on any display where devicePixelRatio != 1
+   (effectively all phones, and Retina/HiDPI desktops). Same reasoning for
+   .mini-inline below. */
+#sky-mini{flex:none;opacity:.85;width:34px;height:34px;}
 #date{font:600 clamp(28px,4.2vw,44px)/1 var(--serif);font-variant-numeric:tabular-nums;}
 #date-sub{font-family:var(--mono);font-size:11.5px;color:var(--text-dim);margin-top:6px;}
 .grid{display:grid;grid-template-columns:1fr minmax(320px,420px);gap:14px;}
-@media (max-width:980px){.grid{grid-template-columns:1fr;} .clock{text-align:left;} .clock-row{flex-direction:row-reverse;justify-content:flex-end;}}
+@media (max-width:980px){.grid{grid-template-columns:1fr;} .clock{text-align:left;}}
+/* (icon stays last/right in both layouts -- see the DOM order comment in
+   App.jsx for why: reversing it here would reintroduce the header's jump
+   on narrow screens.) */
 .panel{background:var(--panel);border:1px solid var(--line-soft);border-radius:16px;padding:14px;min-width:0;}
-.panel h2{font:600 18px var(--serif);margin:0;display:flex;align-items:baseline;gap:8px;}
+.panel h2{font:600 18px var(--serif);margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .panel h2 small{font:400 11.5px "IBM Plex Sans",sans-serif;color:var(--text-faint);}
+.mini-row{display:inline-flex;flex:none;opacity:.85;}
 .head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
-#map{width:100%;aspect-ratio:1.75/1;display:block;border-radius:10px;cursor:crosshair;}
-@media (max-width:640px){#map{aspect-ratio:1.2/1;}}
+/* min-height is the fallback for browsers before aspect-ratio (Safari <15):
+   without it, an unsupported aspect-ratio leaves the canvas at height 0,
+   which JS then reads back via clientHeight and builds a zero-size layer. */
+#map{width:100%;min-height:260px;aspect-ratio:1.75/1;display:block;border-radius:10px;cursor:crosshair;}
+@media (max-width:640px){#map{min-height:220px;aspect-ratio:1.2/1;}}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;}
 .seg button{border:0;border-radius:0;background:transparent;padding:5px 10px;}
 .seg button+button{border-left:1px solid var(--line);}
 .seg button[aria-pressed="true"]{background:#e0a94022;color:#f3cf8a;}
 .seg-check{display:flex;flex-wrap:wrap;gap:4px;}
+.mini-transport{flex:none;}
+.mini-transport button{padding:3px 7px;font-size:12px;line-height:1;}
+#play-mini{min-width:26px;}
 button, select{font:500 13px "IBM Plex Sans",sans-serif;background:#161c45;color:var(--text);border:1px solid var(--line);border-radius:9px;padding:6px 11px;cursor:pointer;}
 button:hover, select:hover{border-color:var(--accent);}
 button:focus-visible, select:focus-visible, input:focus-visible, canvas:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
@@ -48,8 +65,13 @@ button:focus-visible, select:focus-visible, input:focus-visible, canvas:focus-vi
 .cal-controls-label{font-size:11.5px;color:var(--text-faint);}
 .cal-group{border-top:1px solid var(--line-soft);padding:8px 0 6px;}
 .cal-group:first-of-type{border-top:0;}
-.cal-group h3{margin:0 0 4px;font:600 13px "IBM Plex Sans",sans-serif;letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:8px;color:#f3cf8a;}
-.mini-inline{flex:none;display:block;}
+.cal-group h3{margin:0 0 4px;font:600 13px "IBM Plex Sans",sans-serif;letter-spacing:.04em;text-transform:uppercase;color:#f3cf8a;}
+/* Fixed CSS size, not just the width/height attribute -- see #sky-mini
+   above for why: without this, resizing the backing store each draw would
+   also resize the element's own layout box, feeding back into itself. This
+   is stationary (unlike the old in-list version, which got destroyed and
+   recreated -- "jumping" -- every time the calendar list's text changed). */
+#moon-mini{width:26px;height:26px;}
 .country{border-top:1px solid var(--line-soft);padding:7px 0 6px;}
 .country:first-of-type{border-top:0;}
 .country h3{margin:0 0 3px;font:600 12px "IBM Plex Sans",sans-serif;letter-spacing:.06em;text-transform:uppercase;display:flex;align-items:center;gap:6px;}

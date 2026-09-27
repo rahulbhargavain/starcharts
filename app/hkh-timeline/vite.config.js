@@ -12,6 +12,13 @@ export default defineConfig({
     outDir: "../../demo/hkh_timeline",
     emptyOutDir: false,
     assetsDir: "assets",
+    // Vite's default target ("modules") assumes native ES module support but
+    // doesn't downlevel newer syntax (optional chaining, nullish coalescing)
+    // for older engines within that range. es2017 is the widest baseline
+    // that still covers async/await; esbuild lowers the rest for it,
+    // covering older mobile Safari/WebView releases that otherwise show a
+    // blank page on a parse error with no visible message.
+    target: "es2017",
   },
   server: {
     fs: { allow: [".."] },
