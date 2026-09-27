@@ -16,7 +16,7 @@ def parse_paleoclimate(
     mada_txt="review/jja-mada.txt",
     xy_txt="review/jja-mada-xy.txt",
     geda_pdsi_txt="review/GEDA_Reconstructed_JJA_PDSI_0_2020.txt",
-    geda_dai_txt="review/GEDA_Reconstructed_JJA_PDSI_0_2020 (1).txt",
+    geda_dai_txt="review/GEDA_Reconstructed_JJA_DAI_0_2020.txt",
     pages2k_txt="review/PAGES2k_Neukom2019_Full_ensemble.txt",
     output_files=None,
     lon_min=60.0,
@@ -174,7 +174,7 @@ if __name__ == "__main__":
     mada_file = os.path.join(review_dir, "jja-mada.txt")
     xy_file = os.path.join(review_dir, "jja-mada-xy.txt")
     geda_file = os.path.join(review_dir, "GEDA_Reconstructed_JJA_PDSI_0_2020.txt")
-    geda_dai_file = os.path.join(review_dir, "GEDA_Reconstructed_JJA_PDSI_0_2020 (1).txt")
+    geda_dai_file = os.path.join(review_dir, "GEDA_Reconstructed_JJA_DAI_0_2020.txt")
     p2k_file = os.path.join(review_dir, "PAGES2k_Neukom2019_Full_ensemble.txt")
     
     # Locate starcharts repo root
