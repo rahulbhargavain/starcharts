@@ -53,6 +53,10 @@ today ([all demos](https://rahulbhargavain.github.io/starcharts/)).
    `app/hkh-timeline/src/lib/engine.js`) — rebuild with
    `cd app/hkh-timeline && npm install && npm run build`, which writes
    straight into `demo/hkh_timeline/` alongside those shared files.
+   Includes paleoclimate overlays: a continuous two-millennia regional hydroclimate
+   ribbon (0–2020 CE, Great Eurasian Drought Atlas / GEDA PDSI and Drought Area Index)
+   and spatially gridded drought/pluvial anomalies across the mountain arc
+   (1300–2005 CE, Monsoon Asia Drought Atlas / MADA; Cook et al. 2010).
 
 ## Setup
 

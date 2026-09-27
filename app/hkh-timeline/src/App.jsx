@@ -49,9 +49,15 @@ export default function App() {
             <h2>
               Settlements &amp; states <small id="counts" />
             </h2>
-            <div className="seg" id="views" role="group" aria-label="Map extent">
-              <button data-view="india" aria-pressed="false">Indian Himalaya</button>
-              <button data-view="hkh" aria-pressed="true">Whole HKH</button>
+            <div className="map-controls">
+              <div className="seg" id="map-overlays" role="group" aria-label="Map overlays">
+                <button data-overlay="climate" aria-pressed="true" title="Paleoclimate drought & pluvial reconstruction (MADA 1300–2005 CE)">Drought</button>
+                <button data-overlay="seasonal" aria-pressed="true" title="Schematic seasonal monsoon & winter snow">Monsoon</button>
+              </div>
+              <div className="seg" id="views" role="group" aria-label="Map extent">
+                <button data-view="india" aria-pressed="false">Indian Himalaya</button>
+                <button data-view="hkh" aria-pressed="true">Whole HKH</button>
+              </div>
             </div>
           </div>
           <canvas id="map" role="img" aria-label="Map of the Hindu Kush Himalaya at the current date" />
@@ -149,6 +155,15 @@ export default function App() {
           China depict parts of these boundaries differently. Events are assigned to countries on the same basis.{" "}
           <kbd>Space</kbd> play/pause · <kbd>&#8592;</kbd>
           <kbd>&#8594;</kbd> step.
+        </p>
+        <p>
+          <b>Paleoclimate reconstructions.</b> Regional hydroclimate data across the Common Era (0–2020 CE) is from
+          the <i>Great Eurasian Drought Atlas</i> (GEDA; Cook et al., NOAA NCEI Paleoclimatology / Lamont-Doherty Earth
+          Observatory), providing reconstructed summer (June–July–August) Palmer Drought Severity Index (PDSI) and the
+          Drought Area Index (DAI, proportion of the Himalayan-Indic domain experiencing drought). Spatially gridded
+          drought and pluvial anomalies (1300–2005 CE) are from the <i>Monsoon Asia Drought Atlas</i> (MADA; Cook et al.
+          2010, Science 328:486–489), based on tree-ring network chronologies across Asia calibrated against instrumental
+          PDSI.
         </p>
       </footer>
       <div id="tip" />

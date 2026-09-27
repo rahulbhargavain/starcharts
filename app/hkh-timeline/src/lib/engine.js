@@ -127,6 +127,7 @@ export function mountEngine() {
   const state = {
     jd: JD_MIN, playing: true, speed: 2, view: "hkh", showPro: false, showAllCals: false,
     calGroup: "type", countries: new Set(COUNTRY_ORDER),
+    overlays: { climate: true, seasonal: true },
     // Sky mini: same perspective model as the Cosmic Timeline's heliocentric
     // views -- "sun" is top-down, "iso" is tiltable by dragging. zoomAU is
     // continuous (mouse-wheel/pinch); the Inner/Full buttons just jump it to
@@ -317,11 +318,42 @@ export function mountEngine() {
     blobs(ctx, SNOW_ZONES, snow, "#eaf3ff", "screen");
   }
 
+  let madaData = null;
+  function drawPaleoclimate(ctx, year) {
+    if (!madaData || !madaData.points) return;
+    const y = Math.round(year);
+    if (!madaData.data || y < madaData.years[0] || y > madaData.years[madaData.years.length - 1]) return;
+    const grid = madaData.data[y];
+    if (!grid) return;
+    ctx.save();
+    ctx.globalCompositeOperation = "screen"; 
+    const pxPerDeg = (lon, lat) => { const a = map.proj([lon, lat - 0.5]), b = map.proj([lon, lat + 0.5]); return Math.hypot(b[0] - a[0], b[1] - a[1]); };
+    const rBase = pxPerDeg(80, 30);
+    const pts = madaData.points;
+    for (let i = 0; i < grid.length; i++) {
+      const val = grid[i];
+      if (val === -99 || Math.abs(val) < 0.8) continue;
+      const [lon, lat] = pts[i];
+      const [x, y_px] = map.proj([lon, lat]);
+      const color = val < 0 ? "#cc5030" : "#3088cc";
+      const amt = Math.min(1, Math.abs(val) / 4.0);
+      const r = rBase * 1.6;
+      const gr = ctx.createRadialGradient(x, y_px, 0, x, y_px, r);
+      gr.addColorStop(0, rgba(color, 0.4 * amt)); 
+      gr.addColorStop(0.55, rgba(color, 0.14 * amt));
+      gr.addColorStop(1, rgba(color, 0));
+      ctx.fillStyle = gr; 
+      ctx.beginPath(); ctx.arc(x, y_px, r, 0, TAU); ctx.fill();
+    }
+    ctx.restore();
+  }
+
   function drawMap(year) {
     const { ctx, w, h, fs } = map;
     ctx.clearRect(0, 0, w, h);
     blit(ctx, map.base);
-    drawSeasonalOverlay(ctx, year);
+    if (state.overlays.seasonal) drawSeasonalOverlay(ctx, year);
+    if (state.overlays.climate) drawPaleoclimate(ctx, year);
     ctx.save(); ctx.globalCompositeOperation = "lighter";
     const labels = [];
     for (const p of polities) {
@@ -425,10 +457,13 @@ export function mountEngine() {
       lanes.push({ k, y, h: hLane });
       y += hLane + laneGap;
     }
+    const ribbonH = 9, ribbonGap = 6;
+    const ribbon = { y, h: ribbonH };
+    y += ribbonH + ribbonGap;
     const H_ = y + axisH;
     const { ctx, dpr } = fitCanvas(tl.cv, H_);
     const X = (yr) => gutter + yearToT(yr) * (w - gutter - right);
-    Object.assign(tl, { ctx, w, h: H_, gutter, right, X, lanes, tickH });
+    Object.assign(tl, { ctx, w, h: H_, gutter, right, X, lanes, tickH, ribbon });
     const L = makeLayer(w, H_, dpr), g = L.ctx;
     g.font = '400 10.5px "IBM Plex Mono"'; g.textBaseline = "top"; g.textAlign = "center";
     const ticks = w > 900 ? [-7000, -5000, -3000, -2000, -1000, -500, 1, 500, 1000, 1500, 1750, 1900, 2000] : [-7000, -3000, -1000, 1, 1000, 1500, 1900];
@@ -444,6 +479,39 @@ export function mountEngine() {
       if (gutter > 20) {
         g.textAlign = "right"; g.textBaseline = "middle"; g.font = `${ln.k === "IN" ? 600 : 500} 11px "IBM Plex Sans"`;
         g.fillStyle = rgba(col, 0.95); g.fillText(H.countries[ln.k].name, gutter - 10, ln.y + ln.h / 2);
+      }
+    }
+    // GEDA paleoclimate ribbon (0 - 2020 CE)
+    g.fillStyle = "rgba(255,255,255,0.02)";
+    g.fillRect(gutter, ribbon.y - 1, w - gutter - right, ribbon.h + 2);
+    if (gutter > 20) {
+      g.textAlign = "right"; g.textBaseline = "middle"; g.font = '500 10px "IBM Plex Sans"';
+      g.fillStyle = "rgba(175,188,230,0.65)"; g.fillText("Climate (GEDA)", gutter - 10, ribbon.y + ribbon.h / 2);
+    }
+    if (madaData && madaData.geda) {
+      const geda = madaData.geda;
+      const startY = geda.startYear;
+      for (let yr = startY; yr <= geda.endYear; yr++) {
+        const idx = yr - startY;
+        const dai = geda.dai[idx];
+        const pdsi = geda.pdsi[idx];
+        const x0 = X(yr);
+        const x1 = X(yr + 1);
+        const barW = Math.max(1.0, x1 - x0);
+        let col;
+        if (pdsi <= -1.2 || dai >= 0.50) {
+          col = `rgba(224, 75, 50, ${0.45 + 0.5 * Math.min(1, dai / 0.67)})`;
+        } else if (pdsi <= -0.5 || dai >= 0.38) {
+          col = `rgba(224, 150, 60, ${0.35 + 0.4 * (dai - 0.38) / 0.12})`;
+        } else if (pdsi >= 0.6 || dai <= 0.15) {
+          col = `rgba(60, 160, 225, ${0.4 + 0.4 * Math.min(1, pdsi / 1.2)})`;
+        } else if (pdsi >= 0.2 || dai <= 0.25) {
+          col = "rgba(70, 160, 190, 0.28)";
+        } else {
+          col = "rgba(120, 135, 175, 0.14)";
+        }
+        g.fillStyle = col;
+        g.fillRect(x0, ribbon.y, barW, ribbon.h);
       }
     }
     for (const p of polities) {
@@ -812,7 +880,20 @@ export function mountEngine() {
 
   function updatePanels(year) {
     setText($("date"), fmtDate(state.jd));
-    setText($("date-sub"), `${state.jd < 2299160.5 ? "Julian" : "Gregorian"} calendar · Julian day number ${state.jd.toFixed(1)}`);
+    let dateSub = `${state.jd < 2299160.5 ? "Julian" : "Gregorian"} calendar · Julian day number ${state.jd.toFixed(1)}`;
+    if (madaData && madaData.geda) {
+      const yr = Math.round(year);
+      if (yr >= madaData.geda.startYear && yr <= madaData.geda.endYear) {
+        const idx = yr - madaData.geda.startYear;
+        const dai = madaData.geda.dai[idx];
+        const pdsi = madaData.geda.pdsi[idx];
+        const climateTag = pdsi <= -1.2 ? `severe drought (DAI ${(dai * 100).toFixed(0)}%)` :
+                           pdsi <= -0.5 ? `drought (DAI ${(dai * 100).toFixed(0)}%)` :
+                           pdsi >= 0.6 ? `pluvial (PDSI +${pdsi.toFixed(1)})` : null;
+        if (climateTag) dateSub += ` · Climate: ${climateTag}`;
+      }
+    }
+    setText($("date-sub"), dateSub);
     setHTML($("calendars"), calendarsHTML(state.jd));
 
     let prev = null, next = null;
@@ -853,7 +934,8 @@ export function mountEngine() {
     el.innerHTML = Object.values(H.kinds).map((k) => `<span><span class="sw" style="border:1.5px solid ${k.color}"></span>${k.name}</span>`).join("")
       + `<span><span class="sw" style="background:#7dc8ff;border-radius:1px;height:2px;width:14px"></span>River</span><span><span class="sw" style="border-top:1.5px dashed #c8b48c;border-radius:0;height:0;width:14px"></span>Dried-up river</span>`
       + `<span><span class="sw" style="background:#ff9d3d"></span>Settlement</span><span><span class="sw" style="border:1px solid #aab4d7"></span>Abandoned</span><span>▲ Mountain peak</span>`
-      + `<span><span class="sw" style="background:#3fae7a"></span>Monsoon (schematic, seasonal)</span><span><span class="sw" style="background:#eaf3ff"></span>Winter snow (schematic, seasonal)</span>`;
+      + `<span><span class="sw" style="background:#3fae7a"></span>Monsoon (schematic)</span><span><span class="sw" style="background:#eaf3ff"></span>Winter snow (schematic)</span>`
+      + `<span><span class="sw" style="background:#cc5030"></span>Drought (MADA, 1300–2005)</span><span><span class="sw" style="background:#3088cc"></span>Pluvial (MADA)</span>`;
   })();
 
   // ---------- table ----------
@@ -935,6 +1017,15 @@ export function mountEngine() {
       };
     }
   }
+  if ($("map-overlays")) {
+    for (const b of $("map-overlays").children) {
+      b.onclick = () => {
+        const k = b.dataset.overlay;
+        state.overlays[k] = !state.overlays[k];
+        b.setAttribute("aria-pressed", String(state.overlays[k]));
+      };
+    }
+  }
   document.addEventListener("keydown", (e) => {
     if (["SELECT", "INPUT", "SUMMARY"].includes(e.target.tagName)) return;
     if (e.code === "Space") { e.preventDefault(); togglePlay(); }
@@ -954,7 +1045,33 @@ export function mountEngine() {
       if (down) { setJd(A.yearFloatToJd(yearAt(e))); hideTip(); return; }
       const r = tl.cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
       const ln = tl.lanes.find((l) => my >= l.y - 2 && my <= l.y + l.h);
-      if (!ln) return hideTip();
+      if (!ln) {
+        if (tl.ribbon && my >= tl.ribbon.y - 2 && my <= tl.ribbon.y + tl.ribbon.h + 2) {
+          if (madaData && madaData.geda) {
+            const geda = madaData.geda;
+            const hovYr = Math.round(yearAt(e));
+            if (hovYr >= geda.startYear && hovYr <= geda.endYear) {
+              const idx = hovYr - geda.startYear;
+              const dai = geda.dai[idx];
+              const pdsi = geda.pdsi[idx];
+              const daiSpline = geda.daiSpline[idx];
+              const pdsiSpline = geda.pdsiSpline[idx];
+              const status = pdsi <= -1.5 ? "Severe Megadrought" :
+                             pdsi <= -0.8 ? "Major Regional Drought" :
+                             pdsi <= -0.4 ? "Moderate Drought" :
+                             pdsi >= 0.8 ? "Major Regional Pluvial" :
+                             pdsi >= 0.4 ? "Pluvial / Wet" : "Near-Normal Moisture";
+              const col = pdsi < -0.5 ? "#ff7050" : pdsi > 0.4 ? "#60c8ff" : "#d0d8f0";
+              return showTip(e, `<b>Paleoclimate · ${histLabel(hovYr)}</b>`
+                + `<div class="m" style="color:${col};font-weight:600">${status}</div>`
+                + `<div>Drought Area Index (DAI): <b>${(dai * 100).toFixed(1)}%</b> (10-yr: ${(daiSpline * 100).toFixed(1)}%)</div>`
+                + `<div>Reconstructed JJA PDSI: <b>${pdsi > 0 ? "+" : ""}${pdsi.toFixed(2)}</b> (10-yr: ${pdsiSpline > 0 ? "+" : ""}${pdsiSpline.toFixed(2)})</div>`
+                + `<div class="m" style="font-size:10.5px;color:rgba(180,195,230,0.65)">Great Eurasian Drought Atlas (GEDA)</div>`);
+            }
+          }
+        }
+        return hideTip();
+      }
       if (my <= ln.y + tl.tickH + 1) {
         let best = null, bd = 5;
         for (const ev of events) if (ev.k === ln.k) { const d = Math.abs(tl.X(ev.year) - mx); if (d < bd) { bd = d; best = ev; } }
@@ -1057,6 +1174,12 @@ export function mountEngine() {
       map.countries = fc; buildMap();
     })
     .catch((err) => console.warn("country outlines unavailable", err));
+  
+  fetch("mada_hkh.json")
+    .then((r) => r.json())
+    .then((d) => { madaData = d; buildAll(); })
+    .catch((err) => console.warn("paleoclimate data unavailable", err));
+    
   document.fonts && document.fonts.ready.then(buildMap);
 
   return function unmount() {
