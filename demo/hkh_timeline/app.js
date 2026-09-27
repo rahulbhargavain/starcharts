@@ -47,6 +47,7 @@
     const ramp = Math.min(40, (t - f) * 0.2);
     return smooth(Math.min(1, (y - f) / ramp, (t - y) / ramp));
   }
+  const paleoRivers = H.paleoRivers.map((r) => ({ ...r, ta: toAstro(r.dryBy), px: [] }));
   const events = H.events.map((e) => {
     const exact = e.m != null;
     const jd = exact ? A.historicalToJd(e.y, e.m, e.day) + 0.25 : A.historicalToJd(e.y, 7, 1);
@@ -134,6 +135,36 @@
     return p;
   }
 
+  // ---- terrain: NASA Blue Marble shaded relief (public domain) via GIBS WMS ----
+  // The image comes in plate carree; drawRelief re-maps it strip by strip onto the Mercator map.
+  function visibleExtent(proj, w, h) {
+    if (!proj.invert) return VIEWS[state.view];
+    const [x0, y1] = proj.invert([0, 0]), [x1, y0] = proj.invert([w, h]);
+    return [x0, y0, x1, y1].map((v) => Math.round(v * 100) / 100);
+  }
+  const reliefCache = new Map();
+  function reliefFor([x0, y0, x1, y1], pxWide) {
+    const width = Math.min(2048, Math.round(pxWide * 1.1));
+    const height = Math.round(width * (y1 - y0) / (x1 - x0));
+    const key = [x0, y0, x1, y1, width].join(",");
+    if (reliefCache.has(key)) return reliefCache.get(key);
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => buildMap();
+    img.src = "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0"
+      + `&LAYERS=BlueMarble_ShadedRelief_Bathymetry&STYLES=&FORMAT=image/jpeg&CRS=EPSG:4326&BBOX=${y0},${x0},${y1},${x1}&WIDTH=${width}&HEIGHT=${height}`;
+    reliefCache.set(key, img);
+    return img;
+  }
+  function drawRelief(g, proj, img, [x0, y0, x1, y1]) {
+    const N = 80;
+    for (let j = 0; j < N; j++) {
+      const latTop = y1 - (y1 - y0) * j / N, latBottom = y1 - (y1 - y0) * (j + 1) / N;
+      const [px0, py0] = proj([x0, latTop]), [px1, py1] = proj([x1, latBottom]);
+      g.drawImage(img, 0, img.naturalHeight * j / N, img.naturalWidth, img.naturalHeight / N, px0, py0, px1 - px0, py1 - py0 + 0.6);
+    }
+  }
+
   function buildMap() {
     const { ctx, w, h, dpr } = fitCanvas(map.cv);
     Object.assign(map, { ctx, w, h, dpr });
@@ -143,6 +174,12 @@
     bg.addColorStop(0, "#0d1440"); bg.addColorStop(1, "#060920");
     g.fillStyle = bg; g.fillRect(0, 0, w, h);
     const fs = Math.max(9, Math.min(12, w / 80));
+    const extent = visibleExtent(proj, w, h);
+    const relief = reliefFor(extent, w * dpr);
+    if (relief && relief.complete && relief.naturalWidth) {
+      drawRelief(g, proj, relief, extent);
+      g.fillStyle = "rgba(6,9,32,0.32)"; g.fillRect(0, 0, w, h); // keep labels readable
+    }
     if (window.d3 && d3.geoPath) {
       const path = d3.geoPath(proj, g);
       g.beginPath(); path(d3.geoGraticule().step([5, 5])()); g.strokeStyle = "rgba(120,140,230,0.08)"; g.lineWidth = 0.6; g.stroke();
@@ -150,9 +187,18 @@
         for (const f of map.countries.features) {
           const member = H.memberIds.includes(f.id);
           g.beginPath(); path(f);
-          g.fillStyle = f.id === "356" ? "#1d1f50" : member ? "#18204f" : "#0f1433"; g.fill();
-          g.strokeStyle = member ? "rgba(130,150,255,0.35)" : "rgba(130,150,255,0.15)"; g.lineWidth = 0.6; g.stroke();
+          g.fillStyle = member ? "rgba(20,26,70,0.18)" : "rgba(6,8,26,0.55)"; g.fill();
+          g.strokeStyle = member ? "rgba(170,185,255,0.45)" : "rgba(130,150,255,0.2)"; g.lineWidth = 0.6; g.stroke();
         }
+      }
+      if (map.rivers) {
+        g.lineCap = "round"; g.lineJoin = "round";
+        for (const f of map.rivers) {
+          g.beginPath(); path(f);
+          g.strokeStyle = "rgba(125,200,255,0.8)"; g.lineWidth = Math.max(0.6, 2.4 - 0.22 * (f.properties.scalerank || 6)); g.stroke();
+        }
+      }
+      if (map.countries) {
         // India's outline drawn last so its full northern boundary reads clearly
         const india = map.countries.features.find((f) => f.id === "356");
         if (india) { g.beginPath(); path(india); g.strokeStyle = "rgba(255,157,61,0.6)"; g.lineWidth = 1.1; g.stroke(); }
@@ -183,6 +229,7 @@
     const pxPerDeg = (lon, lat) => { const a = proj([lon, lat - 0.5]), b = proj([lon, lat + 0.5]); return Math.hypot(b[0] - a[0], b[1] - a[1]); };
     for (const p of polities) for (const lb of p.lobes) { [lb.px, lb.py] = proj([lb.lon, lb.lat]); lb.pr = lb.r * pxPerDeg(lb.lon, lb.lat); }
     for (const s of settlements) [s.px, s.py] = proj(s.at);
+    for (const r of paleoRivers) r.px = r.path.map((p) => proj(p));
     for (const e of events) [e.px, e.py] = proj(e.at);
     map.fs = fs;
   }
@@ -210,6 +257,15 @@
       if (best && best.v > 0.3) labels.push({ p, x: best.lb.px, y: best.lb.py - best.lb.pr * 0.35, v: best.v, s: best.s });
     }
     ctx.restore();
+    // rivers that dried up or lost their perennial flow: solid while flowing, dashed after
+    for (const r of paleoRivers) {
+      const flowing = year < r.ta;
+      ctx.save();
+      ctx.strokeStyle = flowing ? "rgba(125,200,255,0.85)" : "rgba(200,180,140,0.55)";
+      ctx.lineWidth = flowing ? 2 : 1.4; ctx.setLineDash(flowing ? [] : [4, 4]);
+      ctx.beginPath(); r.px.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
+      ctx.restore();
+    }
     // settlements: live = dot, abandoned = hollow ring
     const win = eventWindowYears();
     for (const s of settlements) {
@@ -395,6 +451,7 @@
 
   (function buildLegend() {
     $("legend").innerHTML = Object.values(H.kinds).map((k) => `<span><span class="sw" style="border:1.5px solid ${k.color}"></span>${k.name}</span>`).join("")
+      + `<span><span class="sw" style="background:#7dc8ff;border-radius:1px;height:2px;width:14px"></span>River</span><span><span class="sw" style="border-top:1.5px dashed #c8b48c;border-radius:0;height:0;width:14px"></span>Dried-up river</span>`
       + `<span><span class="sw" style="background:#ff9d3d"></span>Settlement</span><span><span class="sw" style="border:1px solid #aab4d7"></span>Abandoned</span><span>▲ Peak</span>`;
   })();
 
@@ -497,6 +554,9 @@
         parts.push(`<b style="color:${countryColor(s.k)}">${esc(s.n)}</b>${year >= s.ta ? " (abandoned)" : ""}<div class="m">${s.c ? "c. " : ""}${histLabel(s.fa)}${s.t == null ? "" : ` – ${histLabel(s.ta)}`}</div><div>${esc(s.d)}</div>`);
       }
     }
+    for (const rv of paleoRivers) {
+      if (rv.px.some(([x, y]) => Math.hypot(x - mx, y - my) < 8)) parts.push(`<b style="color:#7dc8ff">${esc(rv.n)}</b> <span class="m">${year < rv.ta ? "flowing" : "dry bed"}</span><div>${esc(rv.d)}</div>`);
+    }
     const win = eventWindowYears();
     for (const ev of events) {
       const ph = (year - ev.year) / win;
@@ -529,6 +589,19 @@
   buildAll();
   setPlaying(state.playing);
   requestAnimationFrame(frame);
+
+  // Natural Earth 1:50m river centrelines, kept to the region
+  fetch("https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_50m_rivers_lake_centerlines.geojson")
+    .then((r) => r.json())
+    .then((fc) => {
+      const inRegion = (c) => c[0] > 55 && c[0] < 110 && c[1] > 12 && c[1] < 46;
+      map.rivers = fc.features.filter((f) => {
+        const lines = f.geometry.type === "MultiLineString" ? f.geometry.coordinates : [f.geometry.coordinates];
+        return lines.some((l) => l.some(inRegion));
+      });
+      buildMap();
+    })
+    .catch((err) => console.warn("rivers unavailable", err));
 
   // Country outlines as on the Government of India's official map (Natural
   // Earth's India worldview; see scripts/build_hkh_boundaries.py).

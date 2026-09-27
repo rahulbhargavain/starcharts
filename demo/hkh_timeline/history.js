@@ -51,6 +51,22 @@ window.HKH = {
     { n: "TIBETAN PLATEAU", at: [88.5, 32.8], rot: 0 },
   ],
 
+  // Rivers that dried up or lost their perennial flow. dryBy is the
+  // approximate date the flow failed; both the dating and the Sarasvati
+  // identification are debated. Courses follow the palaeochannels.
+  paleoRivers: [
+    {
+      n: "Ghaggar-Hakra (the Vedic Sarasvati?)", dryBy: -1900,
+      d: "Monsoon-fed river along whose banks hundreds of Harappan sites cluster. Its flow waned c. 2000-1900 BCE, around the decline of the cities; today it is seasonal and dies out in the desert. Many identify it with the Rigveda's Sarasvati.",
+      path: [[76.95, 30.85], [76.6, 30.45], [76.1, 30.05], [75.5, 29.75], [75.0, 29.53], [74.33, 29.58], [73.9, 29.32], [73.2, 29.19], [72.85, 29.2], [72.1, 29.0], [71.33, 28.77], [70.6, 28.2], [69.8, 27.3], [69.4, 26.3], [69.3, 25.5], [69.5, 24.3]],
+    },
+    {
+      n: "Chautang (the Vedic Drishadvati?)", dryBy: -1900,
+      d: "Former tributary of the Ghaggar, now a dry channel and seasonal drain; often identified with the Drishadvati.",
+      path: [[77.35, 30.3], [76.9, 29.95], [76.35, 29.75], [75.75, 29.55], [75.1, 29.45], [74.5, 29.4], [73.95, 29.33]],
+    },
+  ],
+
   // f/t: founded / abandoned (t omitted = still inhabited)
   settlements: [
     { n: "Mehrgarh", k: "PK", at: [67.62, 29.39], f: -7000, t: -2500, c: true, d: "Early farming village below the Bolan pass." },
