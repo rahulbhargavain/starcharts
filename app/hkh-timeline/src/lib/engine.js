@@ -692,11 +692,15 @@ export function mountEngine() {
         g.beginPath(); g.moveTo(px, py); g.lineTo(x, y); g.stroke();
         g.fillStyle = rgba(st.color, 0.5); g.beginPath(); g.ellipse(px, py, 2, 1, 0, 0, TAU); g.fill();
       }
-      const s = Math.max(1.1, size * st.sizeFrac), glR = s * 1.6;
+      const s = Math.max(1.1, size * st.sizeFrac), glR = s * 3;
       const gl = g.createRadialGradient(x, y, 0, x, y, glR);
-      gl.addColorStop(0, rgba(st.color, 0.3)); gl.addColorStop(1, rgba(st.color, 0));
+      gl.addColorStop(0, rgba(st.color, 0.85)); gl.addColorStop(1, rgba(st.color, 0));
       g.fillStyle = gl; g.beginPath(); g.arc(x, y, glR, 0, TAU); g.fill();
       g.fillStyle = st.color; g.beginPath(); g.arc(x, y, s, 0, TAU); g.fill();
+      g.font = `500 ${Math.max(8, size * 0.022)}px "IBM Plex Mono"`;
+      g.fillStyle = rgba(st.color, 0.95);
+      g.textAlign = "center";
+      g.fillText(st.abbr || b.name.substring(0, 2), x, y - s - 9);
       if (b.name === "Earth") {
         const ex = b.p[0] * k, ey = b.p[1] * k, mr = 13 * scale;
         const [mx, my] = P(ex + mr * Math.cos(pos.Chandra * D2R), ey + mr * Math.sin(pos.Chandra * D2R), 0);
