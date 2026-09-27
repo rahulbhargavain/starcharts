@@ -1,10 +1,12 @@
 """
-Parse Monsoon Asia Drought Atlas (MADA) and Great Eurasian Drought Atlas (GEDA)
-datasets for the Hindu Kush Himalaya (HKH) calendar timeline.
+Parse Monsoon Asia Drought Atlas (MADA), Great Eurasian Drought Atlas (GEDA),
+and PAGES2k Global Temperature Anomaly (Neukom et al. 2019) datasets for the
+Hindu Kush Himalaya (HKH) calendar timeline.
 
 Produces mada_hkh.json containing:
 1. Spatial MADA grid (1300-2005 CE) clipped to the HKH bounding box (15N-40N, 60E-105E).
 2. Regional GEDA 0-2020 CE time-series (PDSI, 10-year spline, Drought Area Index (DAI), and DAI spline).
+3. PAGES2k 1-2017 CE Global Mean Surface Temperature anomalies (ensemble median and 31-year filtered).
 """
 
 import os
@@ -17,13 +19,14 @@ def parse_paleoclimate(
     xy_txt="review/jja-mada-xy.txt",
     geda_pdsi_txt="review/GEDA_Reconstructed_JJA_PDSI_0_2020.txt",
     geda_dai_txt="review/GEDA_Reconstructed_JJA_PDSI_0_2020 (1).txt",
+    pages2k_txt="review/PAGES2k_Neukom2019_Full_ensemble.txt",
     output_files=None,
     lon_min=60.0,
     lon_max=105.0,
     lat_min=15.0,
     lat_max=40.0
 ):
-    print("--- Parsing Paleoclimate Datasets (Path B: Spatial MADA + Regional GEDA Ribbon) ---")
+    print("--- Parsing Paleoclimate & Thermal Datasets (MADA + GEDA + PAGES2k) ---")
     
     # 1. Parse coordinates & filter to HKH domain
     if not os.path.exists(xy_txt):
@@ -88,8 +91,39 @@ def parse_paleoclimate(
 
     years_geda = sorted(list(geda_pdsi.keys()))
     print(f"Parsed GEDA regional series: {len(years_geda)} years ({years_geda[0]} to {years_geda[-1]} CE).")
+
+    # 5. Parse PAGES2k Global Temperature Anomaly (1 - 2017 CE)
+    pages2k_payload = None
+    if os.path.exists(pages2k_txt):
+        with open(pages2k_txt, "r", encoding="utf-8", errors="replace") as f:
+            p2k_lines = [l.strip().split("\t") for l in f if l.strip() and not l.startswith("##")]
+        
+        # p2k_lines[0] is column headers
+        p2k_rows = p2k_lines[1:]
+        p2k_years = []
+        p2k_temp = []
+        p2k_31yr = []
+        for r in p2k_rows:
+            yr = int(r[0])
+            inst = float(r[1]) if r[1] != "NA" else None
+            med = float(r[2]) if r[2] != "NA" else None
+            med31 = float(r[6]) if len(r) > 6 and r[6] != "NA" else None
+            
+            # Reconstruction median when available; instrumental Cowtan & Way for modern extension
+            t_val = med if med is not None else inst
+            p2k_years.append(yr)
+            p2k_temp.append(round(t_val, 2) if t_val is not None else None)
+            p2k_31yr.append(round(med31, 2) if med31 is not None else None)
+            
+        pages2k_payload = {
+            "startYear": p2k_years[0],
+            "endYear": p2k_years[-1],
+            "temp": p2k_temp,
+            "temp31": p2k_31yr
+        }
+        print(f"Parsed PAGES2k temperature series: {len(p2k_years)} years ({p2k_years[0]} to {p2k_years[-1]} CE).")
     
-    # 5. Assemble payload
+    # 6. Assemble combined payload
     payload = {
         "points": hkh_pts,
         "years": years_mada,
@@ -103,6 +137,8 @@ def parse_paleoclimate(
             "daiSpline": [geda_dai[y][1] for y in years_geda]
         }
     }
+    if pages2k_payload:
+        payload["pages2k"] = pages2k_payload
     
     json_bytes = json.dumps(payload, separators=(',', ':'))
     print(f"Compiled JSON payload: {len(json_bytes) / 1024:.1f} KB")
@@ -121,18 +157,49 @@ def parse_paleoclimate(
         print(f"Wrote {out_path} ({len(json_bytes) / 1024:.1f} KB)")
 
 if __name__ == "__main__":
-    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    # Allow running from workspace root or scripts dir
-    cwd = os.getcwd()
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    root_candidates = [
+        os.getcwd(),
+        os.path.abspath(os.path.join(script_dir, "..")),
+        os.path.abspath(os.path.join(script_dir, "..", "..")),
+    ]
+    review_dir = None
+    for r in root_candidates:
+        cand = os.path.join(r, "review")
+        if os.path.exists(os.path.join(cand, "jja-mada-xy.txt")):
+            review_dir = cand
+            break
+            
+    if not review_dir:
+        raise FileNotFoundError("Could not locate review/ directory containing paleoclimate data.")
+        
+    mada_file = os.path.join(review_dir, "jja-mada.txt")
+    xy_file = os.path.join(review_dir, "jja-mada-xy.txt")
+    geda_file = os.path.join(review_dir, "GEDA_Reconstructed_JJA_PDSI_0_2020.txt")
+    geda_dai_file = os.path.join(review_dir, "GEDA_Reconstructed_JJA_PDSI_0_2020 (1).txt")
+    p2k_file = os.path.join(review_dir, "PAGES2k_Neukom2019_Full_ensemble.txt")
     
-    mada_file = os.path.join(cwd, "review", "jja-mada.txt")
-    xy_file = os.path.join(cwd, "review", "jja-mada-xy.txt")
-    geda_file = os.path.join(cwd, "review", "GEDA_Reconstructed_JJA_PDSI_0_2020.txt")
-    geda_dai_file = os.path.join(cwd, "review", "GEDA_Reconstructed_JJA_PDSI_0_2020 (1).txt")
+    # Locate starcharts repo root
+    starcharts_dir = None
+    for r in root_candidates:
+        if os.path.exists(os.path.join(r, "app", "hkh-timeline")):
+            starcharts_dir = r
+            break
+        if os.path.exists(os.path.join(r, "starcharts", "app", "hkh-timeline")):
+            starcharts_dir = os.path.join(r, "starcharts")
+            break
+
+    output_destinations = []
+    if starcharts_dir:
+        output_destinations.append(os.path.join(starcharts_dir, "app", "hkh-timeline", "public", "mada_hkh.json"))
+        output_destinations.append(os.path.join(starcharts_dir, "demo", "hkh_timeline", "mada_hkh.json"))
+    output_destinations.append(os.path.join(review_dir, "hkh_timeline", "mada_hkh.json"))
     
     parse_paleoclimate(
         mada_txt=mada_file,
         xy_txt=xy_file,
         geda_pdsi_txt=geda_file,
-        geda_dai_txt=geda_dai_file
+        geda_dai_txt=geda_dai_file,
+        pages2k_txt=p2k_file,
+        output_files=output_destinations
     )
