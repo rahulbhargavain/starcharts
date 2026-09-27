@@ -127,10 +127,11 @@ export function mountEngine() {
   const state = {
     jd: JD_MIN, playing: true, speed: 2, view: "hkh", showPro: false, showAllCals: false,
     calGroup: "type", countries: new Set(COUNTRY_ORDER),
-    // camera on the Sun-Earth-Moon mini; matches its previous fixed look
-    // (az 0, el 30 -> squish 0.5) until the user drags it, same as the
-    // Cosmic Timeline's tiltable inner-solar-system view.
-    moonAz: 0, moonEl: 30,
+    // Sky mini: same perspective model as the Cosmic Timeline's heliocentric
+    // views -- "sun" is top-down, "iso" is tiltable by dragging. zoomAU is
+    // continuous (mouse-wheel/pinch); the Inner/Full buttons just jump it to
+    // two convenient presets. panX/panY are a screen-space pan offset.
+    skyView: "sun", zoomAU: 10.3, isoAz: -30, isoEl: 42, panX: 0, panY: 0,
   };
   const setJd = (jd) => { state.jd = clamp(jd, JD_MIN, JD_MAX); };
   function daysPerSecond() {
@@ -498,206 +499,271 @@ export function mountEngine() {
   const EQUINOX_DOY = 80;
   const monthAngle = (doy) => A.norm((doy - EQUINOX_DOY) * (360 / 365.25));
 
-  // Half-lit disc facing a given world direction (degrees): the day side
-  // always faces the Sun, wherever the body sits on its orbit, so unlike a
-  // fixed left/right split this needs the direction as an argument.
-  function radialHalfLit(g, x, y, rad, towardDeg, litColor, darkColor) {
-    const a = towardDeg * D2R;
-    g.save(); g.beginPath(); g.arc(x, y, rad, 0, TAU); g.clip();
-    g.fillStyle = darkColor; g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
-    g.fillStyle = litColor; g.beginPath(); g.arc(x, y, rad, a - Math.PI / 2, a + Math.PI / 2); g.fill();
-    g.restore();
-  }
-
-  // ---------- Sun-Earth-Moon mini: both real orbits, nested ----------
-  // Tiltable like the Cosmic Timeline's inner solar-system view: dragging
-  // the canvas changes state.moonAz/moonEl, and every position here goes
-  // through rotProject(wx, wy), a simple azimuth-then-elevation camera (no
-  // z/depth -- these bodies are all close enough to the ecliptic plane that
-  // ignoring inclination isn't visible at this scale). Earth's orbital angle
-  // is the day of year; the three Indian seasons colour that orbit directly,
-  // at their fixed tropical boundaries. The Moon's angle around Earth is its
-  // elongation, applied on top of the Earth-to-Sun direction -- new moon
-  // (elong 0) sits between Earth and the Sun; full moon (elong 180) sits on
-  // the far side -- so both bodies' day sides can just face that direction.
-  // Sizes follow real relative radii (Moon:Earth is about 0.27), not any
-  // orbital scale -- at any scale where Earth and Moon are both legible
-  // discs, their real ~60-Earth-radii separation would put the Moon
-  // essentially on top of Earth, so the Moon's orbit here is drawn
-  // deliberately wider than to-scale, the same simplification an orrery
-  // makes.
-  const PLANET_AU = { Budha: 0.387, Shukra: 0.723, Mangala: 1.524, Guru: 5.203, Shani: 9.537 };
-  const PLANET_STYLE = {
-    Budha: { color: "#7fe0a0", size: 0.02 }, Shukra: { color: "#fff0f8", size: 0.026 },
-    Mangala: { color: "#ff5b4a", size: 0.022 }, Guru: { color: "#ffb46b", size: 0.048 }, Shani: { color: "#8fa6ff", size: 0.044 },
+  // ---------- Sun-centred solar system mini: ported from the Cosmic
+  // Timeline's heliocentric/isometric views (drawHelio/helioCamera), with
+  // its rashi (zodiac) band and nakshatra ticks -- both sidereal, both tied
+  // to the ayanamsha -- replaced by a tropical Indian-month band and an
+  // Indian-season ring, since this diagram has no reason to track
+  // precession. Real linear AU distances (not the previous sqrt-compressed
+  // fudge) with an Inner/Full zoom toggle, exactly like the Cosmic Timeline,
+  // so Earth through Saturn are all geometrically honest at either scale.
+  //
+  // Disc sizes are each planet's real equatorial radius relative to Earth's,
+  // sqrt-compressed rather than linear -- linear would make Jupiter's disc
+  // alone wider than Mercury's entire orbit at this widget's scale. The Sun
+  // keeps its own fixed size below, as in every orrery: no single scale can
+  // show its real ~109-Earth-radius size without swallowing the inner
+  // planets' orbits entirely.
+  const REAL_RADIUS_KM = { Budha: 2439.7, Shukra: 6051.8, Earth: 6371, Mangala: 3389.5, Guru: 69911, Shani: 58232 };
+  const HELIO = {
+    Budha: { color: "#7fe0a0", mm: 4.09 },
+    Shukra: { color: "#fff0f8", mm: 1.6 },
+    Earth: { color: "#8fc4ff", mm: 0.986 },
+    Mangala: { color: "#ff5b4a", mm: 0.524 },
+    Guru: { color: "#ffb46b", mm: 0.0831 },
+    Shani: { color: "#8fa6ff", mm: 0.0335 },
   };
-  const EARTH_AU = 1.0, SATURN_AU = 9.537;
-  // The main asteroid belt: not naked-eye visible (unlike the five planets
-  // above), but shown as a faint schematic band between Mars and Jupiter for
-  // scale, at its usual 2.2-3.2 AU span. Angles are the golden angle, a fixed
-  // even-looking scatter (not literal asteroid positions, and not re-randomised
-  // every frame, which would just read as noise).
+  for (const name of Object.keys(HELIO)) HELIO[name].sizeFrac = 0.021 * Math.sqrt(REAL_RADIUS_KM[name] / REAL_RADIUS_KM.Earth);
+  const ISO_Z_EXAGGERATION = 4;
+  // The main asteroid belt: not naked-eye visible, but shown as a faint
+  // stippled ring between Mars and Jupiter for scale, at its real 2.2-3.2 AU
+  // span (so, unlike the month/season backdrop, it moves with the AU zoom).
   const ASTEROID_AU = [2.2, 3.2];
-  const GOLDEN_DEG = 137.50776;
+  const orbitCache = { key: null, orbits: null };
 
   function drawMoonMini(jd) {
-    const moonCv = $("moon-mini");
-    if (!moonCv) return;
+    const cv = $("moon-mini");
+    if (!cv) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const size = moonCv.clientWidth || 100; // #moon-mini has an explicit CSS width (percentage) -- see style.css
-    if (moonCv.width !== Math.round(size * dpr)) { moonCv.width = Math.round(size * dpr); moonCv.height = Math.round(size * dpr); }
-    const g = moonCv.getContext("2d");
+    const size = cv.clientWidth || 100; // #moon-mini has an explicit CSS width (percentage) -- see style.css
+    if (cv.width !== Math.round(size * dpr)) { cv.width = Math.round(size * dpr); cv.height = Math.round(size * dpr); }
+    const g = cv.getContext("2d");
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, size, size);
-    const { sun, moon } = A.sunMoon(jd); // lighter than grahas(): only needs Sun and Moon
-    const elong = A.norm(moon - sun);
-    const helio = A.heliocentric(jd); // real positions (AU), Sun at the origin, sidereal ecliptic frame
-    const cx = size / 2, cy = size / 2;
-    const rSun = size * 0.055, rMoonOrbit = size * 0.1, rMoon = size * 0.011;
-    const rInner = size * 0.12, rOuter = size * 0.47; // where the AU scale starts/ends on screen
-    const se = Math.sin(state.moonEl * D2R), ce = Math.cos(state.moonEl * D2R), az = state.moonAz * D2R, ca = Math.cos(az), sa = Math.sin(az);
-    // az rotates (wx,wy) about the centre, el squishes the rotated result
-    // into depth (dy) and pushes it toward/away from the camera (depth) --
-    // linear, so an offset (like the Moon's, relative to Earth) can be
-    // projected on its own and simply added to Earth's screen position.
-    const rotProject = (wx, wy) => { const u = wx * ca - wy * sa, v = wx * sa + wy * ca; return [u, v * se, v * ce]; };
-    const toXY = (deg, r, ox = cx, oy = cy) => {
-      const [dx, dy] = rotProject(r * Math.cos(deg * D2R), r * Math.sin(deg * D2R));
-      return [ox + dx, oy - dy];
-    };
-    // The direction to the Sun, converted from a world-space angle to the
-    // actual on-screen angle for this camera (accounting for both az and the
-    // el squish) -- feeding a raw world angle into radialHalfLit instead
-    // (as an earlier version did) draws the day/night terminator at a fixed
-    // diagram angle that drifts away from the real screen direction to the
-    // Sun as soon as the view is tilted or rotated, which is what looked
-    // "sloppy": a terminator line visibly not perpendicular to the Sun.
-    const screenAngle = (deg) => {
-      const [dx, dy] = rotProject(Math.cos(deg * D2R), Math.sin(deg * D2R));
-      return Math.atan2(-dy, dx) / D2R;
-    };
-    const ring = (g, r, from = 0, to = 360, steps = 72) => {
-      for (let i = 0; i <= steps; i++) {
-        const [x, y] = toXY(from + (to - from) * (i / steps), r);
-        i ? g.lineTo(x, y) : g.moveTo(x, y);
-      }
-    };
-    // "Inner" framing like the Cosmic Timeline's Inner zoom, but distances
-    // are sqrt-compressed (not linear AU) so Mercury through Saturn all fit
-    // in one small view without the inner planets bunching invisibly at
-    // the centre -- proportionate in order and relative spacing, not to a
-    // strict linear scale.
-    const auToR = (au) => rInner + (rOuter - rInner) * (Math.sqrt(au) - Math.sqrt(PLANET_AU.Budha)) / (Math.sqrt(SATURN_AU) - Math.sqrt(PLANET_AU.Budha));
-    const angleOf = ([x, y]) => Math.atan2(y, x) / D2R;
 
-    // Month band around Earth's orbit -- like the Cosmic Timeline's rashi
-    // band around its heliocentric ring, but months (this diagram is
-    // tropical, not sidereal) instead of zodiac signs -- plus a separate
-    // ring just outside it for the three Indian seasons, rather than
-    // tinting the orbit itself.
-    const rEarthOrbit = auToR(EARTH_AU), bandHalf = size * 0.026;
-    const rBandIn = rEarthOrbit - bandHalf, rBandOut = rEarthOrbit + bandHalf;
-    const bandPath = (rOut, rIn, a0, a1, steps = 20) => {
-      for (let i = 0; i <= steps; i++) { const [x, y] = toXY(a0 + (a1 - a0) * (i / steps), rOut); i ? g.lineTo(x, y) : g.moveTo(x, y); }
-      for (let i = steps; i >= 0; i--) { const [x, y] = toXY(a0 + (a1 - a0) * (i / steps), rIn); g.lineTo(x, y); }
+    const cx = size / 2 + state.panX, cy = size / 2 + state.panY;
+    const iso = state.skyView === "iso";
+    // el 90 (top-down)/az 0 in "sun" view; dragging in "iso" sets isoAz/isoEl.
+    // Same camera as the Cosmic Timeline's helioCamera: az rotates about the
+    // centre, el squishes the rotated result into depth and pushes it
+    // toward/away from the camera (z), so a world point projects to [x,y,z]
+    // and z alone gives front-to-back drawing order.
+    const el = (iso ? state.isoEl : 90) * D2R, az = (iso ? state.isoAz : 0) * D2R;
+    const ringR = size * (iso ? 0.42 : 0.4);
+    const k = (ringR * 0.97) / state.zoomAU; // px per AU at the current zoom
+    const cy2 = cy + (iso ? size * 0.02 : 0);
+    const ca = Math.cos(az), sa = Math.sin(az), se = Math.sin(el), ce = Math.cos(el);
+    const P = (x, y, z) => { const u = x * ca - y * sa, v = x * sa + y * ca; return [cx - u, cy2 + v * se - z * ce, v * ce + z * se]; };
+    const auXY = ([x, y, z]) => P(x * k, y * k, iso ? z * k * ISO_Z_EXAGGERATION : 0);
+    const onRing = (lon, r) => P(r * Math.cos(lon * D2R), r * Math.sin(lon * D2R), 0);
+    const ring = (r, from = 0, to = 360, steps = 90) => {
+      for (let i = 0; i <= steps; i++) { const [x, y] = onRing(from + (to - from) * (i / steps), r); i ? g.lineTo(x, y) : g.moveTo(x, y); }
     };
+    const band = (rOut, rIn, a0, a1, steps = 16) => {
+      for (let i = 0; i <= steps; i++) { const [x, y] = onRing(a0 + (a1 - a0) * (i / steps), rOut); i ? g.lineTo(x, y) : g.moveTo(x, y); }
+      for (let i = steps; i >= 0; i--) { const [x, y] = onRing(a0 + (a1 - a0) * (i / steps), rIn); g.lineTo(x, y); }
+    };
+
+    const pos = A.grahas(jd); // geocentric sidereal longitudes, for the Moon and the lunar nodes
+    const { sun, moon } = A.sunMoon(jd);
+    const elong = A.norm(moon - sun);
+    const helio = A.heliocentric(jd); // heliocentric AU positions, Sun at the origin
+
+    // ecliptic plane
+    g.beginPath(); ring(ringR); g.closePath();
+    g.fillStyle = iso ? "rgba(90,110,230,0.08)" : "rgba(90,110,230,0.035)"; g.fill();
+
+    // Month band and season ring: a fixed backdrop at the ring's edge, like
+    // the Cosmic Timeline's rashi/nakshatra bands, but tropical (months,
+    // seasons) rather than sidereal -- so it holds still regardless of
+    // ayanamsha or the current AU zoom, exactly like a zodiac band would.
+    const rOut = ringR + size * 0.055, rSeasonRing = rOut + size * 0.028;
     g.textAlign = "center"; g.textBaseline = "middle";
     for (let i = 0; i < 12; i++) {
       let a0 = monthAngle(MONTH_DOY[i]), a1 = monthAngle(MONTH_DOY[i + 1]);
       if (a1 < a0) a1 += 360;
-      g.beginPath(); bandPath(rBandOut, rBandIn, a0, a1); g.closePath();
-      g.fillStyle = i % 2 ? "rgba(120,140,255,0.1)" : "rgba(224,169,64,0.1)"; g.fill();
-      const [lx, ly] = toXY(monthAngle((MONTH_DOY[i] + MONTH_DOY[i + 1]) / 2), rEarthOrbit);
-      g.font = `500 ${Math.max(7, size * 0.024)}px "IBM Plex Mono"`; g.fillStyle = "rgba(210,218,250,0.55)";
+      g.beginPath(); band(rOut, ringR, a0, a1); g.closePath();
+      g.fillStyle = i % 2 ? "rgba(120,140,255,0.09)" : "rgba(224,169,64,0.09)"; g.fill();
+      const [lx, ly] = onRing(monthAngle((MONTH_DOY[i] + MONTH_DOY[i + 1]) / 2), (ringR + rOut) / 2);
+      g.font = `500 ${Math.max(7, size * 0.024)}px "IBM Plex Mono"`; g.fillStyle = "rgba(210,218,250,0.6)";
       g.fillText(MONTH_ABBR[i], lx, ly);
     }
-    g.strokeStyle = "rgba(150,165,240,0.3)"; g.lineWidth = 1;
-    g.beginPath(); ring(g, rBandIn); g.stroke();
-    g.beginPath(); ring(g, rBandOut); g.stroke();
-    const rSeason = rBandOut + size * 0.022;
+    g.strokeStyle = "rgba(150,165,240,0.35)"; g.lineWidth = 1;
+    g.beginPath(); ring(ringR); g.stroke();
+    g.beginPath(); ring(rOut); g.stroke();
     for (const s of SEASON_BANDS) {
-      g.strokeStyle = rgba(s.color, 0.65); g.lineWidth = Math.max(2, size * 0.018);
-      g.beginPath(); ring(g, rSeason, s.t0, s.t1); g.stroke();
+      g.strokeStyle = rgba(s.color, 0.65); g.lineWidth = Math.max(2, size * 0.017);
+      g.beginPath(); ring(rSeasonRing, s.t0, s.t1); g.stroke();
     }
-    // the asteroid belt: a faint scattered band beyond Mars, before Jupiter
+
+    // Everything AU-scaled (asteroid belt, orbits, trails, bodies) is always
+    // clipped to the fixed backdrop ring: at a tight zoom the outer planets
+    // just fall outside it and aren't drawn, rather than poking a dashed
+    // ring out past the season ring the way an unclipped asteroid belt used
+    // to at a zoom tighter than its 2.2-3.2 AU span.
+    g.save();
+    g.beginPath(); ring(ringR); g.closePath(); g.clip();
+
+    // the asteroid belt
     {
-      const r0 = auToR(ASTEROID_AU[0]), r1 = auToR(ASTEROID_AU[1]);
-      const n = Math.round(size * 0.5);
-      g.fillStyle = "rgba(190,185,170,0.5)";
-      for (let i = 0; i < n; i++) {
-        const deg = (i * GOLDEN_DEG) % 360, r = r0 + (r1 - r0) * ((i * 0.61803399) % 1);
-        const [x, y] = toXY(deg, r);
-        g.beginPath(); g.arc(x, y, Math.max(0.5, size * 0.0022), 0, TAU); g.fill();
-      }
+      const r0 = k * ASTEROID_AU[0], r1 = k * ASTEROID_AU[1], rMid = (r0 + r1) / 2;
+      g.fillStyle = "rgba(180,178,168,0.12)";
+      g.beginPath(); band(r1, r0, 0, 360, 48); g.closePath(); g.fill();
+      g.save();
+      g.lineCap = "round"; g.setLineDash([Math.max(1, size * 0.003), Math.max(2, size * 0.012)]);
+      g.strokeStyle = "rgba(205,200,185,0.55)"; g.lineWidth = Math.max(1, size * 0.006);
+      g.beginPath(); ring(rMid); g.stroke();
+      g.restore();
     }
-    // Trails: a short recent path behind Earth and each visible planet,
-    // fading with age, like the Cosmic Timeline's heliocentric view -- its
-    // length adapts to the current playback speed, so it reads as "recent
-    // motion" rather than a fixed decoration.
+
+    // orbit paths, cached per zoom level and per decade (they barely move)
+    const okey = `${Math.round(state.zoomAU * 10)}:${Math.round(jd / 3652)}`;
+    if (orbitCache.key !== okey) {
+      orbitCache.key = okey;
+      orbitCache.orbits = Object.fromEntries(A.HELIO_BODIES.map((n) => [n, A.orbit(n, jd)]));
+    }
+    for (const name of A.HELIO_BODIES) {
+      g.strokeStyle = rgba(HELIO[name].color, name === "Earth" ? 0.45 : 0.28); g.lineWidth = 1;
+      g.beginPath();
+      orbitCache.orbits[name].forEach((p, i) => { const [x, y] = auXY(p); i ? g.lineTo(x, y) : g.moveTo(x, y); });
+      g.closePath(); g.stroke();
+    }
+
+    // Trails: a fading tail behind each planet. Each body gets its own time
+    // span sized to roughly the same ~40 degrees of orbital arc, capped by
+    // the shared playback-speed span -- a shared span (the previous
+    // approach) either showed nothing for fast-moving Mercury/Venus once
+    // play sped up (their mm*span blew past a "too fast to resolve" cutoff)
+    // or, sized for them, gave slow Jupiter/Saturn an invisibly short one.
+    // The always-drawn orbit path above still stands in for a trail once a
+    // planet is moving fast enough that even 40 degrees would smear.
     {
-      const span = clamp(daysPerSecond() * 4, 20, 3000), N = 10;
-      const samples = [];
-      for (let k = N; k >= 1; k--) samples.push(A.heliocentric(jd - span * (k / N)));
-      const bodyAt = (name, s) => (name === "Earth" ? s.Earth : s[name]);
-      for (const name of [...Object.keys(PLANET_AU), "Earth"]) {
-        const col = name === "Earth" ? "#8fc4ff" : PLANET_STYLE[name].color;
-        for (let k = 1; k <= N; k++) {
-          const a = bodyAt(name, samples[k - 1]), b = k < N ? bodyAt(name, samples[k]) : bodyAt(name, helio);
-          const [x0, y0] = toXY(angleOf(a), auToR(Math.hypot(a[0], a[1])));
-          const [x1, y1] = toXY(angleOf(b), auToR(Math.hypot(b[0], b[1])));
-          g.strokeStyle = rgba(col, 0.04 + 0.3 * (k / N) ** 2); g.lineWidth = 1 + 1.2 * (k / N);
+      const N = 16, ARC_DEG = 40;
+      const playSpan = clamp(daysPerSecond() * 4, 20, 3000);
+      g.lineCap = "round";
+      for (const name of A.HELIO_BODIES) {
+        const span = Math.min(playSpan, ARC_DEG / HELIO[name].mm);
+        const samples = [];
+        for (let k2 = N; k2 >= 1; k2--) samples.push(A.heliocentric(jd - span * (k2 / N))[name]);
+        for (let k2 = 1; k2 <= N; k2++) {
+          const [x0, y0] = auXY(samples[k2 - 1]), [x1, y1] = auXY(k2 < N ? samples[k2] : helio[name]);
+          g.strokeStyle = rgba(HELIO[name].color, 0.08 + 0.55 * (k2 / N) ** 2); g.lineWidth = 1 + 1.6 * (k2 / N);
           g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
         }
       }
     }
-    // the other four visible planets: a faint mean-radius orbit ring, a soft glow, and a dot at the real current position
-    for (const name of Object.keys(PLANET_AU)) {
-      const st = PLANET_STYLE[name], rMean = auToR(PLANET_AU[name]);
-      g.strokeStyle = rgba(st.color, 0.18); g.lineWidth = 1;
-      g.beginPath(); ring(g, rMean); g.stroke();
-      const [x, y, z] = helio[name], rr = auToR(Math.hypot(x, y));
-      const [px, py] = toXY(angleOf([x, y]), rr);
-      const glR = size * st.size * 3;
-      const gl = g.createRadialGradient(px, py, 0, px, py, glR);
-      gl.addColorStop(0, rgba(st.color, 0.55)); gl.addColorStop(1, rgba(st.color, 0));
-      g.fillStyle = gl; g.beginPath(); g.arc(px, py, glR, 0, TAU); g.fill();
-      g.fillStyle = st.color; g.beginPath(); g.arc(px, py, size * st.size, 0, TAU); g.fill();
+
+    // sight lines from Earth to each planet and the Sun -- geometric context
+    // for "as seen from Earth" without a separate geocentric view
+    const E = auXY(helio.Earth);
+    for (const name of ["Budha", "Shukra", "Mangala", "Guru", "Shani"]) {
+      const [x, y] = auXY(helio[name]);
+      g.strokeStyle = rgba(HELIO[name].color, 0.22); g.lineWidth = 1; g.setLineDash([3, 4]);
+      g.beginPath(); g.moveTo(E[0], E[1]); g.lineTo(x, y); g.stroke();
     }
-    // Sun, at the centre
-    const sunGlow = g.createRadialGradient(cx, cy, 0, cx, cy, rSun * 2.3);
-    sunGlow.addColorStop(0, "rgba(255,214,110,0.45)"); sunGlow.addColorStop(1, "rgba(255,214,110,0)");
-    g.fillStyle = sunGlow; g.beginPath(); g.arc(cx, cy, rSun * 2.3, 0, TAU); g.fill();
-    g.fillStyle = "#ffd76a"; g.beginPath(); g.arc(cx, cy, rSun, 0, TAU); g.fill();
-    // Earth, orbiting the Sun; Moon, orbiting Earth
-    const earthAngle = angleOf(helio.Earth);
-    const rEarthNow = auToR(Math.hypot(helio.Earth[0], helio.Earth[1]));
-    const [ex, ey] = toXY(earthAngle, rEarthNow);
-    const towardSun = earthAngle + 180; // direction from Earth back to the Sun/centre
-    const moonAngle = towardSun + elong;
-    const [mdx, mdy, mdepth] = rotProject(rMoonOrbit * Math.cos(moonAngle * D2R), rMoonOrbit * Math.sin(moonAngle * D2R));
-    const [mx, my] = [ex + mdx, ey - mdy];
-    const rEarth = size * 0.032;
-    const sunDir = screenAngle(towardSun); // same for Earth and Moon: negligible parallax at this scale
-    const front = mdepth < 0; // draw the nearer body last, on top
-    const drawEarth = () => radialHalfLit(g, ex, ey, rEarth, sunDir, "#8fc4ff", "#16204a");
-    const drawMoon = () => radialHalfLit(g, mx, my, rMoon, sunDir, "#f3ead0", "#20264a");
-    if (front) { drawEarth(); drawMoon(); } else { drawMoon(); drawEarth(); }
+    g.setLineDash([]);
+    {
+      const [sx, sy] = P(0, 0, 0);
+      g.strokeStyle = "rgba(255,201,77,0.22)"; g.setLineDash([3, 4]);
+      g.beginPath(); g.moveTo(E[0], E[1]); g.lineTo(sx, sy); g.stroke(); g.setLineDash([]);
+    }
+
+    // Sun and planets, far to near; Earth also carries the Moon and the
+    // lunar nodes (drawn at a schematic offset, not to real AU scale).
+    const scale = size / 440;
+    const bodies = A.HELIO_BODIES.map((name) => ({ name, p: helio[name], s: auXY(helio[name]) }));
+    const sunBody = { name: "Sun", s: P(0, 0, 0) };
+    const order = [...bodies, sunBody].sort((a, b) => a.s[2] - b.s[2]);
+    for (const b of order) {
+      const [x, y] = b.s;
+      if (b.name === "Sun") {
+        const r = 11 * scale;
+        const gl = g.createRadialGradient(x, y, 0, x, y, r * 3.2);
+        gl.addColorStop(0, "rgba(255,214,110,0.85)"); gl.addColorStop(0.3, "rgba(255,180,60,0.32)"); gl.addColorStop(1, "rgba(255,160,40,0)");
+        g.fillStyle = gl; g.beginPath(); g.arc(x, y, r * 3.2, 0, TAU); g.fill();
+        g.fillStyle = "#ffd76a"; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+        continue;
+      }
+      const st = HELIO[b.name];
+      if (iso) {
+        // drop line to the ecliptic plane, shows ecliptic latitude (exaggerated x4)
+        const [px, py] = auXY([b.p[0], b.p[1], 0]);
+        g.strokeStyle = rgba(st.color, 0.4); g.lineWidth = 1;
+        g.beginPath(); g.moveTo(px, py); g.lineTo(x, y); g.stroke();
+        g.fillStyle = rgba(st.color, 0.5); g.beginPath(); g.ellipse(px, py, 2, 1, 0, 0, TAU); g.fill();
+      }
+      const s = Math.max(1.1, size * st.sizeFrac), glR = s * 1.6;
+      const gl = g.createRadialGradient(x, y, 0, x, y, glR);
+      gl.addColorStop(0, rgba(st.color, 0.3)); gl.addColorStop(1, rgba(st.color, 0));
+      g.fillStyle = gl; g.beginPath(); g.arc(x, y, glR, 0, TAU); g.fill();
+      g.fillStyle = st.color; g.beginPath(); g.arc(x, y, s, 0, TAU); g.fill();
+      if (b.name === "Earth") {
+        const ex = b.p[0] * k, ey = b.p[1] * k, mr = 13 * scale;
+        const [mx, my] = P(ex + mr * Math.cos(pos.Chandra * D2R), ey + mr * Math.sin(pos.Chandra * D2R), 0);
+        g.fillStyle = "#e9edff"; g.beginPath(); g.arc(mx, my, 2.2 * scale, 0, TAU); g.fill();
+        for (const [node, col] of [["Rahu", "#a68bff"], ["Ketu", "#c79a78"]]) {
+          const [nx, ny] = P(ex + 20 * scale * Math.cos(pos[node] * D2R), ey + 20 * scale * Math.sin(pos[node] * D2R), 0);
+          g.strokeStyle = rgba(col, 0.55); g.lineWidth = 1;
+          g.beginPath(); g.moveTo(x, y); g.lineTo(nx, ny); g.stroke();
+          g.fillStyle = col; g.beginPath(); g.arc(nx, ny, 1.7 * scale, 0, TAU); g.fill();
+        }
+      }
+    }
+    g.restore();
     setText($("moon-label"), MOON_PHASE_NAMES[Math.round(elong / 45) % 8]);
   }
 
-  // drag-to-tilt, same interaction as the Cosmic Timeline's sky view
+  // Sky perspective tabs (Sun / Isometric), an Inner/Full zoom preset, and a
+  // Reset. Interaction on the canvas itself: drag tilts in Isometric (or
+  // pans in Sun view, which has nothing to tilt); shift-drag pans in either
+  // view; the wheel zooms continuously between the two presets and beyond.
+  const ZOOM_PRESET = { inner: 1.75, full: 10.3 };
+  if ($("sky-tabs")) {
+    for (const b of $("sky-tabs").children) {
+      b.onclick = () => {
+        state.skyView = b.dataset.sky;
+        for (const o of $("sky-tabs").children) o.setAttribute("aria-pressed", String(o === b));
+      };
+    }
+  }
+  if ($("sky-zooms")) {
+    for (const b of $("sky-zooms").children) {
+      b.onclick = () => {
+        state.zoomAU = ZOOM_PRESET[b.dataset.zoom];
+        for (const o of $("sky-zooms").children) o.setAttribute("aria-pressed", String(o === b));
+      };
+    }
+  }
+  if ($("sky-reset")) {
+    $("sky-reset").onclick = () => {
+      state.zoomAU = ZOOM_PRESET.full; state.panX = 0; state.panY = 0; state.isoAz = -30; state.isoEl = 42;
+      if ($("sky-zooms")) for (const o of $("sky-zooms").children) o.setAttribute("aria-pressed", String(o.dataset.zoom === "full"));
+    };
+  }
   {
     const cv = $("moon-mini");
     if (cv) {
       let drag = null;
-      cv.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY, az: state.moonAz, el: state.moonEl }; cv.setPointerCapture(e.pointerId); });
+      cv.addEventListener("pointerdown", (e) => {
+        drag = { x: e.clientX, y: e.clientY, az: state.isoAz, el: state.isoEl, panX: state.panX, panY: state.panY, pan: e.shiftKey || state.skyView !== "iso" };
+        cv.setPointerCapture(e.pointerId); cv.style.cursor = "grabbing";
+      });
       cv.addEventListener("pointermove", (e) => {
         if (!drag) return;
-        state.moonAz = drag.az - (e.clientX - drag.x) * 0.4;
-        state.moonEl = clamp(drag.el + (e.clientY - drag.y) * 0.3, 8, 90);
+        if (drag.pan) {
+          state.panX = drag.panX + (e.clientX - drag.x);
+          state.panY = drag.panY + (e.clientY - drag.y);
+        } else {
+          state.isoAz = drag.az - (e.clientX - drag.x) * 0.4;
+          state.isoEl = clamp(drag.el + (e.clientY - drag.y) * 0.3, 8, 90);
+        }
       });
-      const endDrag = () => { drag = null; };
+      const endDrag = () => { if (drag) { drag = null; cv.style.cursor = ""; } };
       cv.addEventListener("pointerup", endDrag); cv.addEventListener("pointercancel", endDrag);
+      cv.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        state.zoomAU = clamp(state.zoomAU * Math.exp(e.deltaY * 0.0015), 0.6, 15);
+      }, { passive: false });
     }
   }
 

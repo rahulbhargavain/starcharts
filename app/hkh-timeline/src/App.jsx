@@ -22,12 +22,23 @@ export default function App() {
         <section className="panel" aria-label="Sky and date">
           <div className="head">
             <h2>Sky</h2>
+            <div className="sky-controls">
+              <div className="seg" id="sky-tabs" role="group" aria-label="Sky perspective">
+                <button data-sky="sun" aria-pressed="true">Sun</button>
+                <button data-sky="iso" aria-pressed="false">Isometric</button>
+              </div>
+              <div className="seg" id="sky-zooms" role="group" aria-label="Orbit zoom">
+                <button data-zoom="inner" aria-pressed="false">Inner</button>
+                <button data-zoom="full" aria-pressed="true">Full</button>
+              </div>
+              <button id="sky-reset" title="Reset tilt, zoom and pan">Reset</button>
+            </div>
           </div>
           <div id="date">—</div>
           <div id="date-sub">—</div>
           <canvas
             id="moon-mini" role="img" tabIndex={0}
-            aria-label="The Sun at centre, Earth orbiting it through the year on a labelled month band with a season ring alongside, and the Moon orbiting Earth showing its current phase; Mercury, Venus, Mars, Jupiter and Saturn at their real (compressed-scale) distances with short motion trails, and the asteroid belt as a faint scattered ring beyond Mars. Drag to tilt the view."
+            aria-label="The Sun at centre with Mercury, Venus, Earth, Mars, Jupiter and Saturn on their real orbits, a month ring and a season ring framing Earth's path, and the Moon and lunar nodes beside Earth. Switch to Isometric and drag to tilt (shift-drag to pan); scroll to zoom; drag in Sun view to pan."
           />
           <div id="moon-label" className="moon-label">—</div>
           <div className="card" id="event-card" />
