@@ -157,13 +157,14 @@ export default function App() {
           <kbd>&#8594;</kbd> step.
         </p>
         <p>
-          <b>Paleoclimate reconstructions.</b> Regional hydroclimate data across the Common Era (0–2020 CE) is from
+          <b>Paleoclimate &amp; thermal reconstructions.</b> Regional hydroclimate data across the Common Era (0–2020 CE) is from
           the <i>Great Eurasian Drought Atlas</i> (GEDA; Cook et al., NOAA NCEI Paleoclimatology / Lamont-Doherty Earth
           Observatory), providing reconstructed summer (June–July–August) Palmer Drought Severity Index (PDSI) and the
           Drought Area Index (DAI, proportion of the Himalayan-Indic domain experiencing drought). Spatially gridded
           drought and pluvial anomalies (1300–2005 CE) are from the <i>Monsoon Asia Drought Atlas</i> (MADA; Cook et al.
-          2010, Science 328:486–489), based on tree-ring network chronologies across Asia calibrated against instrumental
-          PDSI.
+          2010, Science 328:486–489), based on tree-ring chronologies across Asia calibrated against instrumental
+          PDSI. Continuous Common Era thermal anomaly spine (1–2000 CE proxy ensemble median, extended to 2017 CE with Cowtan &amp; Way instrumental)
+          is from the <i>PAGES 2k Consortium</i> (Neukom et al. 2019, Nature Geoscience 12:643–649, NOAA NCEI Study 26804).
         </p>
       </footer>
       <div id="tip" />

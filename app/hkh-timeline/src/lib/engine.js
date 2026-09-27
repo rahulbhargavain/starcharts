@@ -457,7 +457,7 @@ export function mountEngine() {
       lanes.push({ k, y, h: hLane });
       y += hLane + laneGap;
     }
-    const ribbonH = 9, ribbonGap = 6;
+    const ribbonH = 11, ribbonGap = 6;
     const ribbon = { y, h: ribbonH };
     y += ribbonH + ribbonGap;
     const H_ = y + axisH;
@@ -481,16 +481,17 @@ export function mountEngine() {
         g.fillStyle = rgba(col, 0.95); g.fillText(H.countries[ln.k].name, gutter - 10, ln.y + ln.h / 2);
       }
     }
-    // GEDA paleoclimate ribbon (0 - 2020 CE)
+    // GEDA paleoclimate & PAGES2k thermal ribbon (0 - 2020 CE)
     g.fillStyle = "rgba(255,255,255,0.02)";
     g.fillRect(gutter, ribbon.y - 1, w - gutter - right, ribbon.h + 2);
     if (gutter > 20) {
       g.textAlign = "right"; g.textBaseline = "middle"; g.font = '500 10px "IBM Plex Sans"';
-      g.fillStyle = "rgba(175,188,230,0.65)"; g.fillText("Climate (GEDA)", gutter - 10, ribbon.y + ribbon.h / 2);
+      g.fillStyle = "rgba(175,188,230,0.65)"; g.fillText("Climate & Temp", gutter - 10, ribbon.y + ribbon.h / 2);
     }
     if (madaData && madaData.geda) {
       const geda = madaData.geda;
       const startY = geda.startYear;
+      const p2k = madaData.pages2k;
       for (let yr = startY; yr <= geda.endYear; yr++) {
         const idx = yr - startY;
         const dai = geda.dai[idx];
@@ -498,6 +499,8 @@ export function mountEngine() {
         const x0 = X(yr);
         const x1 = X(yr + 1);
         const barW = Math.max(1.0, x1 - x0);
+        
+        // 1. Hydroclimate / Drought extent (top 6px)
         let col;
         if (pdsi <= -1.2 || dai >= 0.50) {
           col = `rgba(224, 75, 50, ${0.45 + 0.5 * Math.min(1, dai / 0.67)})`;
@@ -511,7 +514,28 @@ export function mountEngine() {
           col = "rgba(120, 135, 175, 0.14)";
         }
         g.fillStyle = col;
-        g.fillRect(x0, ribbon.y, barW, ribbon.h);
+        g.fillRect(x0, ribbon.y, barW, 6);
+
+        // 2. PAGES2k Thermal Anomaly (bottom 4px)
+        if (p2k && yr >= p2k.startYear && yr <= p2k.endYear) {
+          const t = p2k.temp[yr - p2k.startYear];
+          if (t != null) {
+            let tCol;
+            if (t <= -0.40) {
+              tCol = "rgba(65, 105, 225, 0.65)"; // Volcanic / cold excursion
+            } else if (t <= -0.25) {
+              tCol = "rgba(100, 145, 215, 0.40)"; // Little Ice Age baseline
+            } else if (t >= 0.40) {
+              tCol = "rgba(235, 65, 65, 0.70)"; // Modern warming
+            } else if (t >= 0.10) {
+              tCol = "rgba(225, 150, 50, 0.50)"; // Medieval / Roman warmth
+            } else {
+              tCol = "rgba(140, 155, 185, 0.18)"; // Baseline
+            }
+            g.fillStyle = tCol;
+            g.fillRect(x0, ribbon.y + 6, barW, 4);
+          }
+        }
       }
     }
     for (const p of polities) {
@@ -893,6 +917,13 @@ export function mountEngine() {
         if (climateTag) dateSub += ` · Climate: ${climateTag}`;
       }
     }
+    if (madaData && madaData.pages2k) {
+      const yr = Math.round(year);
+      if (yr >= madaData.pages2k.startYear && yr <= madaData.pages2k.endYear) {
+        const t = madaData.pages2k.temp[yr - madaData.pages2k.startYear];
+        if (t != null) dateSub += ` · Temp: ${t > 0 ? "+" : ""}${t.toFixed(2)}°C`;
+      }
+    }
     setText($("date-sub"), dateSub);
     setHTML($("calendars"), calendarsHTML(state.jd));
 
@@ -1062,11 +1093,26 @@ export function mountEngine() {
                              pdsi >= 0.8 ? "Major Regional Pluvial" :
                              pdsi >= 0.4 ? "Pluvial / Wet" : "Near-Normal Moisture";
               const col = pdsi < -0.5 ? "#ff7050" : pdsi > 0.4 ? "#60c8ff" : "#d0d8f0";
-              return showTip(e, `<b>Paleoclimate · ${histLabel(hovYr)}</b>`
+
+              let p2kHtml = "";
+              if (madaData.pages2k && hovYr >= madaData.pages2k.startYear && hovYr <= madaData.pages2k.endYear) {
+                const t = madaData.pages2k.temp[hovYr - madaData.pages2k.startYear];
+                const t31 = madaData.pages2k.temp31 ? madaData.pages2k.temp31[hovYr - madaData.pages2k.startYear] : null;
+                if (t != null) {
+                  const tCol = t < -0.25 ? "#80a8ff" : t > 0.25 ? "#ff8060" : "#d0d8f0";
+                  p2kHtml = `<div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.08)">`
+                    + `Global Temp Anomaly: <b style="color:${tCol}">${t > 0 ? "+" : ""}${t.toFixed(2)} °C</b>`
+                    + (t31 != null ? ` <span class="m">(31-yr: ${t31 > 0 ? "+" : ""}${t31.toFixed(2)} °C)</span>` : "")
+                    + `<div class="m" style="font-size:10px;color:rgba(180,195,230,0.6)">PAGES2k Ensemble (Neukom et al. 2019)</div></div>`;
+                }
+              }
+
+              return showTip(e, `<b>Paleoclimate & Thermal · ${histLabel(hovYr)}</b>`
                 + `<div class="m" style="color:${col};font-weight:600">${status}</div>`
                 + `<div>Drought Area Index (DAI): <b>${(dai * 100).toFixed(1)}%</b> (10-yr: ${(daiSpline * 100).toFixed(1)}%)</div>`
                 + `<div>Reconstructed JJA PDSI: <b>${pdsi > 0 ? "+" : ""}${pdsi.toFixed(2)}</b> (10-yr: ${pdsiSpline > 0 ? "+" : ""}${pdsiSpline.toFixed(2)})</div>`
-                + `<div class="m" style="font-size:10.5px;color:rgba(180,195,230,0.65)">Great Eurasian Drought Atlas (GEDA)</div>`);
+                + `<div class="m" style="font-size:10.5px;color:rgba(180,195,230,0.65)">Great Eurasian Drought Atlas (GEDA)</div>`
+                + p2kHtml);
             }
           }
         }
