@@ -125,7 +125,7 @@ export function mountEngine() {
   ];
   const AUTO_SECONDS = 150;
   const state = {
-    jd: JD_MIN, playing: true, speed: 0, view: "hkh", showPro: false, showAllCals: false,
+    jd: JD_MIN, playing: true, speed: 2, view: "hkh", showPro: false, showAllCals: false,
     calGroup: "type", countries: new Set(COUNTRY_ORDER),
   };
   const setJd = (jd) => { state.jd = clamp(jd, JD_MIN, JD_MAX); };
@@ -529,7 +529,6 @@ export function mountEngine() {
     setText($("date"), fmtDate(state.jd));
     setText($("date-sub"), `${state.jd < 2299160.5 ? "Julian" : "Gregorian"} calendar · JD ${state.jd.toFixed(1)}`);
     setHTML($("calendars"), calendarsHTML(state.jd));
-    drawMoonMini(state.jd); drawSkyMini(state.jd);
 
     let prev = null, next = null;
     for (const e of events) { if (e.jd <= state.jd + 0.5) prev = e; else { next = e; break; } }
@@ -733,6 +732,12 @@ export function mountEngine() {
     const year = A.jdToYearFloat(state.jd);
     drawMap(year);
     drawTimeline(year);
+    // These two are cheap and depict continuous motion (the Moon's daily
+    // elongation, the sky wheel), so they redraw every frame regardless of
+    // the panel throttle below -- otherwise, at any speed above roughly a
+    // day per second, each 90ms-apart redraw skips visibly across the
+    // Moon's 29.5-day cycle instead of looking continuous.
+    drawMoonMini(state.jd); drawSkyMini(state.jd);
     if (now - lastPanel > 90) { updatePanels(year); lastPanel = now; }
     rafId = requestAnimationFrame(frame);
   }
