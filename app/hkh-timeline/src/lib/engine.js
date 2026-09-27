@@ -438,53 +438,6 @@ export function mountEngine() {
     "New Moon", "Waxing Crescent", "First Quarter", "Waxing Gibbous",
     "Full Moon", "Waning Gibbous", "Last Quarter", "Waning Crescent",
   ];
-  function drawMoonMini(jd) {
-    const moonCv = $("moon-mini");
-    if (!moonCv) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const size = 44; // fixed: see #moon-mini in style.css -- never read back clientWidth here
-    if (moonCv.width !== size * dpr) { moonCv.width = size * dpr; moonCv.height = size * dpr; }
-    const g = moonCv.getContext("2d");
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.clearRect(0, 0, size, size);
-    // sunMoon(), not grahas(): this only needs the Sun and Moon, and runs
-    // every animation frame, so the lighter path matters.
-    const { sun, moon } = A.sunMoon(jd);
-    const elong = A.norm(moon - sun); // 0 = new, 180 = full
-    const r = size * 0.38, cx = size / 2, cy = size / 2;
-    const glow = g.createRadialGradient(cx, cy, 0, cx, cy, r * 2.1);
-    glow.addColorStop(0, "rgba(235,232,255,0.22)"); glow.addColorStop(1, "rgba(235,232,255,0)");
-    g.fillStyle = glow; g.beginPath(); g.arc(cx, cy, r * 2.1, 0, TAU); g.fill();
-    // Lit region as one closed path -- an outer-limb half circle (the bright
-    // side) joined to a terminator half-ellipse -- rather than the more
-    // common "draw a half circle, then subtract/add an ellipse" trick: that
-    // needs a separate sign flip for crescent vs. gibbous, which is easy to
-    // get backwards (an earlier version here did, and effectively never
-    // varied the shape with elong -- every phase looked like a half moon).
-    // Verified against (1-cos(elong))/2 by sampling the rendered pixels at
-    // 22.5-degree steps across a full cycle.
-    // The unlit side gets a dim "earthshine" tint, not the page background:
-    // against the panel it would otherwise vanish near new moon, leaving
-    // only a sliver that read as a jump-cut rather than a continuous phase.
-    g.save(); g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.clip();
-    g.fillStyle = "#2c3363"; g.fillRect(cx - r, cy - r, r * 2, r * 2);
-    const litGrad = g.createLinearGradient(cx - r, 0, cx + r, 0);
-    litGrad.addColorStop(0, "#e8dfc2"); litGrad.addColorStop(1, "#fff8e4");
-    const litSide = elong <= 180 ? 1 : -1; // +1 = bright limb on the right
-    const tx = -r * Math.cos(elong * D2R) * litSide; // signed terminator half-width
-    g.beginPath();
-    g.arc(cx, cy, r, -Math.PI / 2, Math.PI / 2, litSide < 0);
-    g.ellipse(cx, cy, Math.abs(tx), r, 0, Math.PI / 2, -Math.PI / 2, tx < 0);
-    g.closePath();
-    g.fillStyle = litGrad; g.fill();
-    g.restore();
-    g.strokeStyle = "rgba(230,225,255,0.35)"; g.lineWidth = 1; g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.stroke();
-    setText($("moon-label"), MOON_PHASE_NAMES[Math.round(elong / 45) % 8]);
-  }
-
-
-  // ---------- sky mini: understated Sun+Moon wheel ----------
-  const skyCv = $("sky-mini");
   // Three Indian seasons, as fixed TROPICAL solar-longitude boundaries
   // (0=spring equinox, 90=summer solstice, 180=autumn equinox, 270=winter
   // solstice) -- converted to sidereal each draw via the real ayanamsha, so
@@ -495,6 +448,127 @@ export function mountEngine() {
     { name: "Summer", t0: 0, t1: 90, color: "#ffb15e" },
     { name: "Monsoon", t0: 90, t1: 270, color: "#57c98a" },
   ];
+  // Draws the season band as a ring around (cx,cy); squish=1 is a plain
+  // circle (the sky wheel), squish<1 an isometric-tilted ellipse (the
+  // orbit diagram below).
+  function drawSeasonBand(g, jd, cx, cy, rBand, squish, lineWidth) {
+    const ayan = A.ayanamsha(jd);
+    g.lineCap = "butt";
+    for (const s of SEASON_BANDS) {
+      const lon0 = A.norm(s.t0 - ayan), span = A.norm(s.t1 - s.t0);
+      g.strokeStyle = rgba(s.color, 0.5); g.lineWidth = lineWidth;
+      g.beginPath();
+      const steps = Math.max(2, Math.round(span / 12));
+      for (let i = 0; i <= steps; i++) {
+        const lon = lon0 + (span * i) / steps;
+        const x = cx - rBand * Math.cos(lon * D2R), y = cy + rBand * Math.sin(lon * D2R) * squish;
+        i ? g.lineTo(x, y) : g.moveTo(x, y);
+      }
+      g.stroke();
+    }
+  }
+
+  // Half-lit disc facing a given world direction (degrees): the day side
+  // always faces the Sun, wherever the body sits on its orbit, so unlike a
+  // fixed left/right split this needs the direction as an argument.
+  function radialHalfLit(g, x, y, rad, towardDeg, litColor, darkColor) {
+    const a = towardDeg * D2R;
+    g.save(); g.beginPath(); g.arc(x, y, rad, 0, TAU); g.clip();
+    g.fillStyle = darkColor; g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+    g.fillStyle = litColor; g.beginPath(); g.arc(x, y, rad, a - Math.PI / 2, a + Math.PI / 2); g.fill();
+    g.restore();
+  }
+
+  // ---------- Sun-Earth-Moon mini: both real orbits, nested ----------
+  // Isometric (tilted ellipse, matching the Cosmic Timeline's Inner zoom).
+  // Earth's orbital angle is the day of year (a plain calendar/tropical
+  // angle -- this diagram isn't tied to the sidereal zodiac the way the sky
+  // wheel is, so no ayanamsha here); the three Indian seasons colour that
+  // orbit directly, at their fixed tropical boundaries, rather than a
+  // separate ring. The Moon's angle around Earth is its elongation, applied
+  // on top of the Earth-to-Sun direction -- new moon (elong 0) sits between
+  // Earth and the Sun; full moon (elong 180) sits on the far side -- so
+  // both bodies' day sides can just face that same direction. Sizes follow
+  // real relative radii (Moon:Earth is about 0.27), not any orbital scale.
+  // Real mean orbital radii (AU) and a modest, legible (not literally
+  // to-scale) size for each of the five visible planets, matching the
+  // colours used on the sky wheel.
+  const PLANET_AU = { Budha: 0.387, Shukra: 0.723, Mangala: 1.524, Guru: 5.203, Shani: 9.537 };
+  const PLANET_STYLE = {
+    Budha: { color: "#7fe0a0", size: 0.02 }, Shukra: { color: "#fff0f8", size: 0.026 },
+    Mangala: { color: "#ff5b4a", size: 0.022 }, Guru: { color: "#ffb46b", size: 0.048 }, Shani: { color: "#8fa6ff", size: 0.044 },
+  };
+  const EARTH_AU = 1.0, SATURN_AU = 9.537;
+
+  function drawMoonMini(jd) {
+    const moonCv = $("moon-mini");
+    if (!moonCv) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const size = moonCv.clientWidth || 100; // #moon-mini has an explicit CSS width (percentage) -- see style.css
+    if (moonCv.width !== Math.round(size * dpr)) { moonCv.width = Math.round(size * dpr); moonCv.height = Math.round(size * dpr); }
+    const g = moonCv.getContext("2d");
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, size, size);
+    const { sun, moon } = A.sunMoon(jd); // lighter than grahas(): only needs Sun and Moon
+    const elong = A.norm(moon - sun);
+    const helio = A.heliocentric(jd); // real positions (AU), Sun at the origin, sidereal ecliptic frame
+    const cx = size / 2, cy = size / 2, squish = 0.5;
+    const rSun = size * 0.055, rMoonOrbit = size * 0.1, rMoon = size * 0.011;
+    const rInner = size * 0.12, rOuter = size * 0.47; // where the AU scale starts/ends on screen
+    const toXY = (deg, r, ox = cx, oy = cy) => [ox + r * Math.cos(deg * D2R), oy - r * Math.sin(deg * D2R) * squish];
+    // "Inner" framing like the Cosmic Timeline's Inner zoom, but distances
+    // are sqrt-compressed (not linear AU) so Mercury through Saturn all fit
+    // in one small view without the inner planets bunching invisibly at
+    // the centre -- proportionate in order and relative spacing, not to a
+    // strict linear scale.
+    const auToR = (au) => rInner + (rOuter - rInner) * (Math.sqrt(au) - Math.sqrt(PLANET_AU.Budha)) / (Math.sqrt(SATURN_AU) - Math.sqrt(PLANET_AU.Budha));
+    const angleOf = ([x, y]) => Math.atan2(y, x) / D2R;
+
+    // Earth's orbit, coloured by the three Indian seasons (fixed tropical
+    // boundaries, converted into this same real sidereal frame via the
+    // ayanamsha, same as the equinox marker on the sky wheel)
+    const rEarthOrbit = auToR(EARTH_AU), ayan = A.ayanamsha(jd);
+    for (const s of SEASON_BANDS) {
+      g.strokeStyle = rgba(s.color, 0.6); g.lineWidth = Math.max(2, size * 0.026);
+      g.beginPath();
+      const lon0 = A.norm(s.t0 - ayan), span = A.norm(s.t1 - s.t0), steps = Math.max(2, Math.round(span / 12));
+      for (let i = 0; i <= steps; i++) {
+        const [x, y] = toXY(lon0 + (span * i) / steps, rEarthOrbit);
+        i ? g.lineTo(x, y) : g.moveTo(x, y);
+      }
+      g.stroke();
+    }
+    // the other four visible planets: a faint mean-radius orbit ring, plus a dot at the real current position
+    for (const name of Object.keys(PLANET_AU)) {
+      const st = PLANET_STYLE[name], rMean = auToR(PLANET_AU[name]);
+      g.strokeStyle = rgba(st.color, 0.18); g.lineWidth = 1;
+      g.beginPath(); g.ellipse(cx, cy, rMean, rMean * squish, 0, 0, TAU); g.stroke();
+      const [x, y, z] = helio[name], rr = auToR(Math.hypot(x, y));
+      const [px, py] = toXY(angleOf([x, y]), rr);
+      g.fillStyle = st.color; g.beginPath(); g.arc(px, py, size * st.size, 0, TAU); g.fill();
+    }
+    // Sun, at the centre
+    const sunGlow = g.createRadialGradient(cx, cy, 0, cx, cy, rSun * 2.3);
+    sunGlow.addColorStop(0, "rgba(255,214,110,0.45)"); sunGlow.addColorStop(1, "rgba(255,214,110,0)");
+    g.fillStyle = sunGlow; g.beginPath(); g.arc(cx, cy, rSun * 2.3, 0, TAU); g.fill();
+    g.fillStyle = "#ffd76a"; g.beginPath(); g.arc(cx, cy, rSun, 0, TAU); g.fill();
+    // Earth, orbiting the Sun; Moon, orbiting Earth
+    const earthAngle = angleOf(helio.Earth);
+    const rEarthNow = auToR(Math.hypot(helio.Earth[0], helio.Earth[1]));
+    const [ex, ey] = toXY(earthAngle, rEarthNow);
+    const towardSun = earthAngle + 180; // direction from Earth back to the Sun/centre
+    const moonAngle = towardSun + elong;
+    const [mx, my] = toXY(moonAngle, rMoonOrbit, ex, ey);
+    const rEarth = size * 0.032;
+    const front = Math.sin(moonAngle * D2R) < 0; // draw the nearer body last
+    const drawEarth = () => radialHalfLit(g, ex, ey, rEarth, towardSun, "#8fc4ff", "#16204a");
+    const drawMoon = () => radialHalfLit(g, mx, my, rMoon, towardSun, "#f3ead0", "#20264a");
+    if (front) { drawEarth(); drawMoon(); } else { drawMoon(); drawEarth(); }
+    setText($("moon-label"), MOON_PHASE_NAMES[Math.round(elong / 45) % 8]);
+  }
+
+  // ---------- sky mini: understated Sun+Moon wheel ----------
+  const skyCv = $("sky-mini");
   function drawSkyMini(jd) {
     if (!skyCv) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -503,37 +577,29 @@ export function mountEngine() {
     const g = skyCv.getContext("2d");
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, size, size);
-    const cx = size / 2, cy = size / 2, r = size * 0.34, rBand = size * 0.4;
-    const lonXY = (lon, rr) => [cx - rr * Math.cos(lon * D2R), cy + rr * Math.sin(lon * D2R)];
-    // seasons: a thin, understated band just outside the planet ring,
-    // sampled as a polyline so there's no ambiguity about which way canvas
-    // angles vs. sidereal longitude run
-    const ayan = A.ayanamsha(jd);
-    g.lineCap = "butt";
-    for (const s of SEASON_BANDS) {
-      const lon0 = A.norm(s.t0 - ayan), span = A.norm(s.t1 - s.t0);
-      g.strokeStyle = rgba(s.color, 0.55); g.lineWidth = Math.max(1.5, size * 0.018);
-      g.beginPath();
-      const steps = Math.max(2, Math.round(span / 12));
-      for (let i = 0; i <= steps; i++) {
-        const [x, y] = lonXY(lon0 + (span * i) / steps, rBand);
-        i ? g.lineTo(x, y) : g.moveTo(x, y);
-      }
-      g.stroke();
-    }
-    g.strokeStyle = "rgba(150,165,240,0.35)"; g.lineWidth = 1; g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.stroke();
+    // isometric (tilted ellipse), matching the Earth-Moon orbit diagram below
+    const cx = size / 2, cy = size * 0.52, squish = 0.5, r = size * 0.34, rBand = size * 0.42;
+    const lonXY = (lon, rr) => [cx - rr * Math.cos(lon * D2R), cy + rr * Math.sin(lon * D2R) * squish];
+    // a thin, understated band just outside the planet ring
+    drawSeasonBand(g, jd, cx, cy, rBand, squish, Math.max(1.5, size * 0.018));
+    g.strokeStyle = "rgba(150,165,240,0.35)"; g.lineWidth = 1;
+    g.beginPath(); g.ellipse(cx, cy, r, r * squish, 0, 0, TAU); g.stroke();
     const pos = A.grahas(jd);
     const dot = (lon, rr, color, s) => {
       const [x, y] = lonXY(lon, rr);
       g.fillStyle = color; g.beginPath(); g.arc(x, y, s, 0, TAU); g.fill();
     };
+    // dot sizes scaled by real physical radius (Jupiter biggest, Moon
+    // smallest -- it's smaller even than Mercury), not by apparent
+    // brightness; the Sun is a deliberate exception, sized to stand out as
+    // the wheel's other reference point rather than to any real scale
     for (const [name, color, rr, s] of [
-      ["Shani", "#8fa6ff", r * 0.55, size * 0.032], ["Guru", "#ffb46b", r * 0.68, size * 0.038],
-      ["Mangala", "#ff5b4a", r * 0.8, size * 0.028], ["Shukra", "#fff0f8", r * 0.9, size * 0.028],
-      ["Budha", "#7fe0a0", r * 0.95, size * 0.026],
+      ["Shani", "#8fa6ff", r * 0.55, size * 0.043], ["Guru", "#ffb46b", r * 0.68, size * 0.045],
+      ["Mangala", "#ff5b4a", r * 0.8, size * 0.026], ["Shukra", "#fff0f8", r * 0.9, size * 0.028],
+      ["Budha", "#7fe0a0", r * 0.95, size * 0.025],
     ]) dot(pos[name], rr, color, s);
     dot(pos.Surya, r, "#ffc94d", size * 0.062);
-    dot(pos.Chandra, r * 1.0, "#e9edff", size * 0.045);
+    dot(pos.Chandra, r * 1.0, "#e9edff", size * 0.024);
   }
 
   // ---------- panels ----------
@@ -611,6 +677,17 @@ export function mountEngine() {
       ? active.map(({ p, v }) => `<span class="chip" style="border-color:${rgba(p.color, 0.3 + 0.6 * v)};color:${rgba(p.color, 0.55 + 0.45 * v)}">${esc(p.n)}</span>`).join("")
       : `<span class="ev-desc" style="color:var(--text-faint)">None in the dataset yet.</span>`);
   }
+
+  (function buildSkyLegend() {
+    const el = $("sky-legend");
+    if (!el) return;
+    const bodies = [
+      ["Surya", "Sun", "#ffc94d"], ["Chandra", "Moon", "#e9edff"], ["Budha", "Mercury", "#7fe0a0"],
+      ["Shukra", "Venus", "#fff0f8"], ["Mangala", "Mars", "#ff5b4a"], ["Guru", "Jupiter", "#ffb46b"], ["Shani", "Saturn", "#8fa6ff"],
+    ];
+    el.innerHTML = bodies.map(([sanskrit, en, color]) => `<span><span class="sw" style="background:${color}"></span>${en} (${sanskrit})</span>`).join("")
+      + SEASON_BANDS.map((s) => `<span><span class="sw" style="background:${s.color}"></span>${s.name}</span>`).join("");
+  })();
 
   (function buildLegend() {
     const el = $("legend");

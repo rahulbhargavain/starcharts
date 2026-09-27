@@ -21,7 +21,7 @@ export default function App() {
       <div className="grid">
         <section className="panel" aria-label="Sky and date">
           <div className="head">
-            <h2>Sky <small>Lahiri sidereal</small></h2>
+            <h2>Sky</h2>
           </div>
           <div id="date">—</div>
           <div id="date-sub">—</div>
@@ -29,10 +29,12 @@ export default function App() {
             id="sky-mini" role="img"
             aria-label="The sidereal sky right now: Sun, Moon and the five visible planets, with the three Indian seasons banded around the ring"
           />
-          <div className="moon-row" title="Moon phase (lunar)">
-            <canvas id="moon-mini" width="44" height="44" />
-            <span id="moon-label">—</span>
-          </div>
+          <div className="legend" id="sky-legend" />
+          <canvas
+            id="moon-mini" role="img"
+            aria-label="The Sun at centre, Earth orbiting it through the year, and the Moon orbiting Earth, showing its current phase; the three Indian seasons colour Earth's orbit"
+          />
+          <div id="moon-label" className="moon-label">—</div>
           <div className="card" id="event-card" />
         </section>
 
