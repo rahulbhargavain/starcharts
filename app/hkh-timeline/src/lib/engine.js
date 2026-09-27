@@ -434,56 +434,106 @@ export function mountEngine() {
   // ---------- moon phase mini ----------
   // Looked up fresh each call: this canvas lives inside #calendars, which is
   // recreated (innerHTML) whenever the displayed calendar text changes.
+  const MOON_PHASE_NAMES = [
+    "New Moon", "Waxing Crescent", "First Quarter", "Waxing Gibbous",
+    "Full Moon", "Waning Gibbous", "Last Quarter", "Waning Crescent",
+  ];
   function drawMoonMini(jd) {
     const moonCv = $("moon-mini");
     if (!moonCv) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const size = 26; // fixed: see #moon-mini in style.css -- never read back clientWidth here
+    const size = 44; // fixed: see #moon-mini in style.css -- never read back clientWidth here
     if (moonCv.width !== size * dpr) { moonCv.width = size * dpr; moonCv.height = size * dpr; }
     const g = moonCv.getContext("2d");
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, size, size);
-    const pos = A.grahas(jd);
-    const elong = ((pos.Chandra - pos.Surya) % 360 + 360) % 360; // 0=new, 180=full
-    const r = size * 0.42, cx = size / 2, cy = size / 2;
-    g.fillStyle = "rgba(230,225,255,0.14)"; g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.fill();
-    // disc split by a terminator ellipse, following the classic phase-icon construction
+    // sunMoon(), not grahas(): this only needs the Sun and Moon, and runs
+    // every animation frame, so the lighter path matters.
+    const { sun, moon } = A.sunMoon(jd);
+    const elong = A.norm(moon - sun); // 0 = new, 180 = full
+    const r = size * 0.38, cx = size / 2, cy = size / 2;
+    const glow = g.createRadialGradient(cx, cy, 0, cx, cy, r * 2.1);
+    glow.addColorStop(0, "rgba(235,232,255,0.22)"); glow.addColorStop(1, "rgba(235,232,255,0)");
+    g.fillStyle = glow; g.beginPath(); g.arc(cx, cy, r * 2.1, 0, TAU); g.fill();
+    // Lit region as one closed path -- an outer-limb half circle (the bright
+    // side) joined to a terminator half-ellipse -- rather than the more
+    // common "draw a half circle, then subtract/add an ellipse" trick: that
+    // needs a separate sign flip for crescent vs. gibbous, which is easy to
+    // get backwards (an earlier version here did, and effectively never
+    // varied the shape with elong -- every phase looked like a half moon).
+    // Verified against (1-cos(elong))/2 by sampling the rendered pixels at
+    // 22.5-degree steps across a full cycle.
+    // The unlit side gets a dim "earthshine" tint, not the page background:
+    // against the panel it would otherwise vanish near new moon, leaving
+    // only a sliver that read as a jump-cut rather than a continuous phase.
     g.save(); g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.clip();
-    const lit = elong <= 180 ? "right" : "left";
-    g.fillStyle = "#f3ead0";
-    g.beginPath(); g.arc(cx, cy, r, -Math.PI / 2, Math.PI / 2, lit === "left"); g.fill();
-    const k = Math.cos(elong * D2R); // -1..1, terminator ellipse half-width factor
-    g.fillStyle = lit === "right" ? "#0e1330" : "#f3ead0";
-    g.beginPath(); g.ellipse(cx, cy, Math.abs(k) * r, r, 0, -Math.PI / 2, Math.PI / 2, k > 0); g.fill();
+    g.fillStyle = "#2c3363"; g.fillRect(cx - r, cy - r, r * 2, r * 2);
+    const litGrad = g.createLinearGradient(cx - r, 0, cx + r, 0);
+    litGrad.addColorStop(0, "#e8dfc2"); litGrad.addColorStop(1, "#fff8e4");
+    const litSide = elong <= 180 ? 1 : -1; // +1 = bright limb on the right
+    const tx = -r * Math.cos(elong * D2R) * litSide; // signed terminator half-width
+    g.beginPath();
+    g.arc(cx, cy, r, -Math.PI / 2, Math.PI / 2, litSide < 0);
+    g.ellipse(cx, cy, Math.abs(tx), r, 0, Math.PI / 2, -Math.PI / 2, tx < 0);
+    g.closePath();
+    g.fillStyle = litGrad; g.fill();
     g.restore();
-    g.strokeStyle = "rgba(230,225,255,0.3)"; g.lineWidth = 1; g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.stroke();
+    g.strokeStyle = "rgba(230,225,255,0.35)"; g.lineWidth = 1; g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.stroke();
+    setText($("moon-label"), MOON_PHASE_NAMES[Math.round(elong / 45) % 8]);
   }
 
 
   // ---------- sky mini: understated Sun+Moon wheel ----------
   const skyCv = $("sky-mini");
+  // Three Indian seasons, as fixed TROPICAL solar-longitude boundaries
+  // (0=spring equinox, 90=summer solstice, 180=autumn equinox, 270=winter
+  // solstice) -- converted to sidereal each draw via the real ayanamsha, so
+  // the band slowly precesses through the ring over the centuries, same as
+  // the equinox marker in the Cosmic Timeline's sky wheel.
+  const SEASON_BANDS = [
+    { name: "Winter", t0: 270, t1: 360, color: "#7fb2ff" },
+    { name: "Summer", t0: 0, t1: 90, color: "#ffb15e" },
+    { name: "Monsoon", t0: 90, t1: 270, color: "#57c98a" },
+  ];
   function drawSkyMini(jd) {
     if (!skyCv) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const size = 34; // fixed: see #sky-mini in style.css -- never read back clientWidth here
-    if (skyCv.width !== size * dpr) { skyCv.width = size * dpr; skyCv.height = size * dpr; }
+    const size = skyCv.clientWidth || 140; // #sky-mini has an explicit CSS width (percentage), so this is stable
+    if (skyCv.width !== Math.round(size * dpr)) { skyCv.width = Math.round(size * dpr); skyCv.height = Math.round(size * dpr); }
     const g = skyCv.getContext("2d");
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, size, size);
-    const cx = size / 2, cy = size / 2, r = size * 0.42;
+    const cx = size / 2, cy = size / 2, r = size * 0.34, rBand = size * 0.44;
+    const lonXY = (lon, rr) => [cx - rr * Math.cos(lon * D2R), cy + rr * Math.sin(lon * D2R)];
+    // seasons: a band just outside the planet ring, sampled as a polyline so
+    // there's no ambiguity about which way canvas angles vs. sidereal
+    // longitude run
+    const ayan = A.ayanamsha(jd);
+    g.lineCap = "butt";
+    for (const s of SEASON_BANDS) {
+      const lon0 = A.norm(s.t0 - ayan), span = A.norm(s.t1 - s.t0);
+      g.strokeStyle = s.color; g.lineWidth = Math.max(2, size * 0.05);
+      g.beginPath();
+      const steps = Math.max(2, Math.round(span / 12));
+      for (let i = 0; i <= steps; i++) {
+        const [x, y] = lonXY(lon0 + (span * i) / steps, rBand);
+        i ? g.lineTo(x, y) : g.moveTo(x, y);
+      }
+      g.stroke();
+    }
     g.strokeStyle = "rgba(150,165,240,0.35)"; g.lineWidth = 1; g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.stroke();
     const pos = A.grahas(jd);
     const dot = (lon, rr, color, s) => {
-      const x = cx - rr * Math.cos(lon * D2R), y = cy + rr * Math.sin(lon * D2R);
+      const [x, y] = lonXY(lon, rr);
       g.fillStyle = color; g.beginPath(); g.arc(x, y, s, 0, TAU); g.fill();
     };
     for (const [name, color, rr, s] of [
-      ["Shani", "#8fa6ff", r * 0.55, 1.1], ["Guru", "#ffb46b", r * 0.68, 1.3],
-      ["Mangala", "#ff5b4a", r * 0.8, 1], ["Shukra", "#fff0f8", r * 0.9, 1],
-      ["Budha", "#7fe0a0", r * 0.95, 0.9],
+      ["Shani", "#8fa6ff", r * 0.55, size * 0.032], ["Guru", "#ffb46b", r * 0.68, size * 0.038],
+      ["Mangala", "#ff5b4a", r * 0.8, size * 0.028], ["Shukra", "#fff0f8", r * 0.9, size * 0.028],
+      ["Budha", "#7fe0a0", r * 0.95, size * 0.026],
     ]) dot(pos[name], rr, color, s);
-    dot(pos.Surya, r, "#ffc94d", 2.2);
-    dot(pos.Chandra, r * 1.0, "#e9edff", 1.6);
+    dot(pos.Surya, r, "#ffc94d", size * 0.062);
+    dot(pos.Chandra, r * 1.0, "#e9edff", size * 0.045);
   }
 
   // ---------- panels ----------

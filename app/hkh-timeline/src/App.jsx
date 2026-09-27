@@ -10,29 +10,32 @@ export default function App() {
   return (
     <div className="wrap">
       <header>
-        <div>
-          <h1>Hindu Kush Himalaya · a calendar timeline</h1>
-          <div className="tagline">
-            Settlements, states and events of the mountains from Afghanistan to Myanmar, 7000 BCE to today, dated in
-            the calendars of the eight ICIMOD member countries, with India in focus. Companion to the{" "}
-            <a href="../cosmic_timeline/">Cosmic Timeline</a>.
-          </div>
-        </div>
-        <div className="clock">
-          {/* icon last: pinned to the fixed right edge of the header via
-              justify-content:space-between, so it never shifts as the date
-              text (a varying number of digits) changes width */}
-          <div className="clock-row">
-            <div>
-              <div id="date">—</div>
-              <div id="date-sub">—</div>
-            </div>
-            <canvas id="sky-mini" width="34" height="34" title="The sidereal sky right now (Sun and visible planets, understated)" />
-          </div>
+        <h1>Hindu Kush Himalaya · a calendar timeline</h1>
+        <div className="tagline">
+          Settlements, states and events of the mountains from Afghanistan to Myanmar, 7000 BCE to today, dated in
+          the calendars of the eight ICIMOD member countries, with India in focus. Companion to the{" "}
+          <a href="../cosmic_timeline/">Cosmic Timeline</a>.
         </div>
       </header>
 
       <div className="grid">
+        <section className="panel" aria-label="Sky and date">
+          <div className="head">
+            <h2>Sky <small>Lahiri sidereal</small></h2>
+          </div>
+          <div id="date">—</div>
+          <div id="date-sub">—</div>
+          <canvas
+            id="sky-mini" role="img"
+            aria-label="The sidereal sky right now: Sun, Moon and the five visible planets, with the three Indian seasons banded around the ring"
+          />
+          <div className="moon-row" title="Moon phase (lunar)">
+            <canvas id="moon-mini" width="44" height="44" />
+            <span id="moon-label">—</span>
+          </div>
+          <div className="card" id="event-card" />
+        </section>
+
         <section className="panel" aria-label="Map">
           <div className="head">
             <h2>
@@ -45,51 +48,45 @@ export default function App() {
           </div>
           <canvas id="map" role="img" aria-label="Map of the Hindu Kush Himalaya at the current date" />
           <div className="legend" id="legend" />
-          <div className="cards">
-            <div className="card" id="event-card" />
-            <div className="card">
-              <div className="label">States at this date</div>
-              <div className="chips" id="active" />
-            </div>
+          <div className="card">
+            <div className="label">States at this date</div>
+            <div className="chips" id="active" />
           </div>
-        </section>
-
-        <section className="panel" aria-label="Calendars">
-          <div className="head">
-            <h2>
-              Calendars
-              <span className="mini-row" title="Moon phase (lunar)">
-                <canvas id="moon-mini" width="26" height="26" />
-              </span>
-              <span className="seg mini-transport" role="group" aria-label="Time controls">
-                <button id="step-back-mini" title="Step back (←)" aria-label="Step back">◀</button>
-                <button id="play-mini" aria-label="Play">▶</button>
-                <button id="step-fwd-mini" title="Step forward (→)" aria-label="Step forward">▶</button>
-              </span>
-            </h2>
-            <select id="cal-mode" aria-label="Group calendars by" defaultValue="type">
-              <option value="type">By type (solar / lunisolar / lunar)</option>
-              <option value="country">By country</option>
-            </select>
-          </div>
-          <div className="cal-controls">
-            <label className="cal-toggle">
-              <input type="checkbox" id="show-pro" /> show calendars not yet in use
-            </label>
-          </div>
-          <div className="cal-controls">
-            <span className="cal-controls-label">Countries:</span>
-            <div className="seg-check" id="cal-filters" />
-          </div>
-          <div id="calendars" aria-live="off" />
         </section>
       </div>
 
+      <section className="panel" aria-label="Calendars">
+        <div className="head">
+          <h2>
+            Calendars
+            <span className="seg mini-transport" role="group" aria-label="Time controls">
+              <button id="step-back-mini" title="Step back" aria-label="Step back">&#9664;</button>
+              <button id="play-mini" aria-label="Play">&#9654;</button>
+              <button id="step-fwd-mini" title="Step forward" aria-label="Step forward">&#9654;</button>
+            </span>
+          </h2>
+          <select id="cal-mode" aria-label="Group calendars by" defaultValue="type">
+            <option value="type">By type (solar / lunisolar / lunar)</option>
+            <option value="country">By country</option>
+          </select>
+        </div>
+        <div className="cal-controls">
+          <label className="cal-toggle">
+            <input type="checkbox" id="show-pro" /> show calendars not yet in use
+          </label>
+        </div>
+        <div className="cal-controls">
+          <span className="cal-controls-label">Countries:</span>
+          <div className="seg-check" id="cal-filters" />
+        </div>
+        <div id="calendars" aria-live="off" />
+      </section>
+
       <section className="panel" aria-label="Time controls">
         <div className="controls">
-          <button id="step-back" title="Step back (←)" aria-label="Step back">◀</button>
-          <button id="play" aria-label="Play">▶ Play</button>
-          <button id="step-fwd" title="Step forward (→)" aria-label="Step forward">▶</button>
+          <button id="step-back" title="Step back" aria-label="Step back">&#9664;</button>
+          <button id="play" aria-label="Play">&#9654; Play</button>
+          <button id="step-fwd" title="Step forward" aria-label="Step forward">&#9654;</button>
           <div className="seg" id="speeds" role="group" aria-label="Playback speed" />
           <div className="spacer" />
           <select id="jump" aria-label="Jump to an event" />
@@ -128,7 +125,10 @@ export default function App() {
           backwards (proleptic). Indian lunisolar month names before c. 500 CE, and Chinese months before 1645,
           follow later rules than were in force at the time. By default, an event shows only its own country's
           calendar (alongside the Julian/Gregorian date already given) — tick "show correspondence with other
-          calendars" on an event to see how every calendar in use at the time read that same day.
+          calendars" on an event to see how every calendar in use at the time read that same day. The season band
+          around the sky wheel is drawn at fixed points in the tropical (Sun-relative) year, shifted into the
+          sidereal frame by the same precessing ayanamsha as everything else here, so it slowly rotates through the
+          ring over the centuries.
         </p>
         <p>
           <b>Dates and places.</b> Dates marked c. are approximate or traditional. Terrain is NASA's Blue Marble
@@ -139,8 +139,8 @@ export default function App() {
           (Natural Earth's India worldview): all of Jammu &amp; Kashmir and Ladakh, including the areas administered
           by Pakistan and China, and Arunachal Pradesh are shown as India, and Tibet as part of China. Pakistan and
           China depict parts of these boundaries differently. Events are assigned to countries on the same basis.{" "}
-          <kbd>Space</kbd> play/pause · <kbd>←</kbd>
-          <kbd>→</kbd> step.
+          <kbd>Space</kbd> play/pause · <kbd>&#8592;</kbd>
+          <kbd>&#8594;</kbd> step.
         </p>
       </footer>
       <div id="tip" />
