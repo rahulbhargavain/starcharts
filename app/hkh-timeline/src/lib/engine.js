@@ -1,32 +1,59 @@
-(function () {
-  "use strict";
-  const A = window.Astro, C = window.Calendars, H = window.HKH;
+// Ported from the original vanilla demo/hkh_timeline/app.js. React renders the
+// DOM once (App.jsx); this module attaches to those same element ids and
+// drives everything interactive, exactly as the vanilla version did -- the
+// map/timeline canvas rendering and calendar math are unchanged, so they stay
+// checked against tests/test_hkh_calendars.py and tests/test_hkh_boundaries.py.
+// New in this version: grouped (solar/lunar/lunisolar) calendar display with
+// a country filter, a moon-phase mini, a seasonal Earth-orbit mini, an
+// understated sky-wheel mini, and events that default to one calendar
+// (the country's own) plus the Gregorian/Julian date already in `when`.
+import { Astro as A, Calendars as C, HKH as H } from "./data.js";
+
+const TAU = Math.PI * 2, D2R = Math.PI / 180;
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const COUNTRY_ORDER = ["IN", "NP", "BT", "CN", "PK", "AF", "BD", "MM"];
+const SHORT = {
+  "in-national": "Saka (national)", "in-vs": "Vikram Samvat", "in-shaka": "Shaka", "in-saptarishi": "Saptarishi",
+  "in-bengali": "Bengali (India)", "in-tibetan": "Tibetan (Ladakh)", "np-bs": "Bikram Sambat", "np-ns": "Nepal Sambat",
+  "bt-lunar": "Bhutanese", "cn-lunisolar": "Chinese", "cn-tibetan": "Tibetan", "pk-hijri": "Hijri", "af-sh": "Solar Hijri",
+  "af-hijri": "Hijri", "bd-bangla": "Bangla", "bd-hijri": "Hijri", "mm-me": "Myanmar Era",
+};
+// Solar: fixed to the tropical/Gregorian year. Lunisolar: lunar months, a
+// solar correction keeps the year aligned (even where we track only the
+// year). Lunar: pure lunar count, no solar correction (Hijri).
+const CAL_GROUP = {
+  "in-national": "solar", "in-bengali": "solar", "np-bs": "solar", "af-sh": "solar", "bd-bangla": "solar",
+  "in-vs": "lunisolar", "in-shaka": "lunisolar", "in-saptarishi": "lunisolar", "np-ns": "lunisolar",
+  "cn-lunisolar": "lunisolar", "in-tibetan": "lunisolar", "bt-lunar": "lunisolar", "cn-tibetan": "lunisolar", "mm-me": "lunisolar",
+  "pk-hijri": "lunar", "af-hijri": "lunar", "bd-hijri": "lunar",
+};
+const GROUP_LABEL = { solar: "Solar", lunisolar: "Lunisolar", lunar: "Lunar" };
+const GROUP_ORDER = ["solar", "lunisolar", "lunar"];
+// The one calendar shown for an event by default: the country's own primary
+// calendar (its Gregorian/Julian date is already shown via `when`).
+const DEFAULT_CAL_BY_COUNTRY = {
+  IN: "in-national", NP: "np-bs", BT: "bt-lunar", CN: "cn-lunisolar",
+  PK: "pk-hijri", AF: "af-sh", BD: "bd-bangla", MM: "mm-me",
+};
+
+const toAstro = (h) => (h < 0 ? h + 1 : h);
+const histLabel = (astro) => (astro <= 0 ? `${1 - astro} BCE` : `${astro} CE`);
+const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+const smooth = (x) => x * x * (3 - 2 * x);
+function rgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
+function fmtDate(jd) {
+  const c = A.jdToCalendar(jd);
+  return `${c.day} ${MONTHS[c.month - 1]} ${histLabel(c.year)}`;
+}
+
+export function mountEngine() {
   const $ = (id) => document.getElementById(id);
-  const TAU = Math.PI * 2;
-  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const COUNTRY_ORDER = ["IN", "NP", "BT", "CN", "PK", "AF", "BD", "MM"];
-  const SHORT = {
-    "in-national": "Saka (national)", "in-vs": "Vikram Samvat", "in-shaka": "Shaka", "in-saptarishi": "Saptarishi",
-    "in-bengali": "Bengali (India)", "in-tibetan": "Tibetan (Ladakh)", "np-bs": "Bikram Sambat", "np-ns": "Nepal Sambat",
-    "bt-lunar": "Bhutanese", "cn-lunisolar": "Chinese", "cn-tibetan": "Tibetan", "pk-hijri": "Hijri", "af-sh": "Solar Hijri",
-    "af-hijri": "Hijri", "bd-bangla": "Bangla", "bd-hijri": "Hijri", "mm-me": "Myanmar Era",
-  };
 
-  const toAstro = (h) => (h < 0 ? h + 1 : h);
-  const histLabel = (astro) => (astro <= 0 ? `${1 - astro} BCE` : `${astro} CE`);
-  const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
-  const smooth = (x) => x * x * (3 - 2 * x);
-  function rgba(hex, a) {
-    const n = parseInt(hex.slice(1), 16);
-    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
-  }
-  const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
-  function fmtDate(jd) {
-    const c = A.jdToCalendar(jd);
-    return `${c.day} ${MONTHS[c.month - 1]} ${histLabel(c.year)}`;
-  }
-
-  // ---------- time scale: square root of years-before-2040, so recent centuries get room ----------
+  // ---------- time scale: square root of years-before-2040 ----------
   const Y_END = 2040;
   const JD_MIN = A.historicalToJd(-7000, 1, 1), JD_MAX = A.historicalToJd(2030, 12, 31);
   const Y_MIN = A.jdToYearFloat(JD_MIN), Y_MAX = A.jdToYearFloat(JD_MAX);
@@ -61,8 +88,20 @@
     if (e.exact) { const f = cal.full(e.jd); return f.note ? `${f.text} (${f.note})` : f.text; }
     return `${e.c ? "c. " : ""}${C.yearSpan(cal, e.astroYear)}`;
   }
-  // collapse identical readings (e.g. the three Hijri entries) into one chip
-  function eventChips(e, includePro) {
+  function chipHTML(cal, e, includePro) {
+    const on = inUse(cal, e.astroYear);
+    if (!on && !includePro) return "";
+    const text = eventCalendarText(cal, e);
+    return `<span class="chip" style="${on ? "" : "opacity:.5"}"${on ? "" : ' title="not yet in use (proleptic)"'}>${esc(SHORT[cal.id])}: <b>${esc(text)}</b></span>`;
+  }
+  // Default: just the event's own country's calendar (Gregorian/Julian is
+  // already shown as `when`). state.showAllCals reveals every calendar that
+  // applied anywhere at the time, collapsing identical readings into a chip.
+  function eventChips(e, showAllCals, includePro) {
+    if (!showAllCals) {
+      const cal = C.CALENDARS.find((c) => c.id === DEFAULT_CAL_BY_COUNTRY[e.k]);
+      return cal ? chipHTML(cal, e, true) : "";
+    }
     const byKey = new Map();
     for (const cal of C.CALENDARS) {
       const on = inUse(cal, e.astroYear);
@@ -84,8 +123,11 @@
     { label: "1 yr/s", d: 365.2425 },
     { label: "10 yr/s", d: 3652.425 },
   ];
-  const AUTO_SECONDS = 150; // whole range, at an even pace along the timeline
-  const state = { jd: JD_MIN, playing: true, speed: 0, view: "india", showPro: false, countries: new Set(COUNTRY_ORDER) };
+  const AUTO_SECONDS = 150;
+  const state = {
+    jd: JD_MIN, playing: true, speed: 0, view: "hkh", showPro: false, showAllCals: false,
+    calGroup: "type", countries: new Set(COUNTRY_ORDER),
+  };
   const setJd = (jd) => { state.jd = clamp(jd, JD_MIN, JD_MAX); };
   function daysPerSecond() {
     const s = SPEEDS[state.speed];
@@ -135,8 +177,6 @@
     return p;
   }
 
-  // ---- terrain: NASA Blue Marble shaded relief (public domain) via GIBS WMS ----
-  // The image comes in plate carree; drawRelief re-maps it strip by strip onto the Mercator map.
   function visibleExtent(proj, w, h) {
     if (!proj.invert) return VIEWS[state.view];
     const [x0, y1] = proj.invert([0, 0]), [x1, y0] = proj.invert([w, h]);
@@ -169,6 +209,7 @@
     const { ctx, w, h, dpr } = fitCanvas(map.cv);
     Object.assign(map, { ctx, w, h, dpr });
     const proj = makeProjection(w, h);
+    map.proj = proj;
     const L = makeLayer(w, h, dpr), g = L.ctx;
     const bg = g.createRadialGradient(w * 0.5, h * 0.4, 0, w * 0.5, h * 0.4, Math.max(w, h) * 0.75);
     bg.addColorStop(0, "#0d1440"); bg.addColorStop(1, "#060920");
@@ -178,7 +219,7 @@
     const relief = reliefFor(extent, w * dpr);
     if (relief && relief.complete && relief.naturalWidth) {
       drawRelief(g, proj, relief, extent);
-      g.fillStyle = "rgba(6,9,32,0.32)"; g.fillRect(0, 0, w, h); // keep labels readable
+      g.fillStyle = "rgba(6,9,32,0.32)"; g.fillRect(0, 0, w, h);
     }
     if (window.d3 && d3.geoPath) {
       const path = d3.geoPath(proj, g);
@@ -199,18 +240,16 @@
         }
       }
       if (map.countries) {
-        // India's outline drawn last so its full northern boundary reads clearly
         const india = map.countries.features.find((f) => f.id === "356");
         if (india) { g.beginPath(); path(india); g.strokeStyle = "rgba(255,157,61,0.6)"; g.lineWidth = 1.1; g.stroke(); }
       }
     }
-    // mountain ranges and peaks
     g.textAlign = "center"; g.textBaseline = "middle";
     for (const r of H.ranges) {
       const [x, y] = proj(r.at);
       g.save(); g.translate(x, y); g.rotate(r.rot * Math.PI / 180);
       g.font = `italic 500 ${fs * 1.05}px "Cormorant Garamond"`; g.fillStyle = "rgba(200,210,255,0.22)";
-      g.fillText(r.n.split("").join(" "), 0, 0); g.restore();
+      g.fillText(r.n.split("").join(" "), 0, 0); g.restore();
     }
     for (const p of H.peaks) {
       const [x, y] = proj(p.at);
@@ -223,7 +262,7 @@
     for (const [k, at] of Object.entries(COUNTRY_LABELS)) {
       const [x, y] = proj(at);
       g.font = `600 ${fs * 0.9}px "IBM Plex Sans"`; g.fillStyle = rgba(countryColor(k), 0.4);
-      g.fillText(H.countries[k].name.toUpperCase().split("").join(" "), x, y);
+      g.fillText(H.countries[k].name.toUpperCase().split("").join(" "), x, y);
     }
     map.base = L;
     const pxPerDeg = (lon, lat) => { const a = proj([lon, lat - 0.5]), b = proj([lon, lat + 0.5]); return Math.hypot(b[0] - a[0], b[1] - a[1]); };
@@ -240,7 +279,6 @@
     const { ctx, w, h, fs } = map;
     ctx.clearRect(0, 0, w, h);
     blit(ctx, map.base);
-    // polities
     ctx.save(); ctx.globalCompositeOperation = "lighter";
     const labels = [];
     for (const p of polities) {
@@ -257,7 +295,6 @@
       if (best && best.v > 0.3) labels.push({ p, x: best.lb.px, y: best.lb.py - best.lb.pr * 0.35, v: best.v, s: best.s });
     }
     ctx.restore();
-    // rivers that dried up or lost their perennial flow: solid while flowing, dashed after
     for (const r of paleoRivers) {
       const flowing = year < r.ta;
       ctx.save();
@@ -266,7 +303,6 @@
       ctx.beginPath(); r.px.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
       ctx.restore();
     }
-    // settlements: live = dot, abandoned = hollow ring
     const win = eventWindowYears();
     for (const s of settlements) {
       if (year < s.fa) continue;
@@ -283,7 +319,6 @@
         ctx.strokeStyle = rgba(col, 1 - ph); ctx.beginPath(); ctx.arc(s.px, s.py, 3 + 14 * Math.sqrt(ph), 0, TAU); ctx.stroke();
       }
     }
-    // polity labels, biggest first, skipping collisions
     labels.sort((a, b) => b.s - a.s);
     const placed = [];
     const overlaps = (r) => placed.some((p) => r[0] < p[0] + p[2] && p[0] < r[0] + r[2] && r[1] < p[1] + p[3] && p[1] < r[1] + r[3]);
@@ -296,7 +331,6 @@
       ctx.fillStyle = `rgba(6,9,32,${0.6 * lab.v})`; ctx.fillRect(...rect);
       ctx.fillStyle = rgba(lab.p.color, 0.4 + 0.6 * lab.v); ctx.fillText(lab.p.n, lab.x, lab.y);
     }
-    // events and new settlements: expanding rings with a label
     const flashes = [];
     for (const e of events) {
       const ph = (year - e.year) / win;
@@ -397,32 +431,143 @@
     ctx.strokeStyle = "#e0a940"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h - 18); ctx.stroke();
   }
 
+  // ---------- moon phase mini ----------
+  // Looked up fresh each call: this canvas lives inside #calendars, which is
+  // recreated (innerHTML) whenever the displayed calendar text changes.
+  function drawMoonMini(jd) {
+    const moonCv = $("moon-mini");
+    if (!moonCv) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const size = moonCv.clientWidth || 26;
+    if (moonCv.width !== size * dpr) { moonCv.width = size * dpr; moonCv.height = size * dpr; }
+    const g = moonCv.getContext("2d");
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, size, size);
+    const pos = A.grahas(jd);
+    const elong = ((pos.Chandra - pos.Surya) % 360 + 360) % 360; // 0=new, 180=full
+    const r = size * 0.42, cx = size / 2, cy = size / 2;
+    g.fillStyle = "rgba(230,225,255,0.14)"; g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.fill();
+    // disc split by a terminator ellipse, following the classic phase-icon construction
+    g.save(); g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.clip();
+    const lit = elong <= 180 ? "right" : "left";
+    g.fillStyle = "#f3ead0";
+    g.beginPath(); g.arc(cx, cy, r, -Math.PI / 2, Math.PI / 2, lit === "left"); g.fill();
+    const k = Math.cos(elong * D2R); // -1..1, terminator ellipse half-width factor
+    g.fillStyle = lit === "right" ? "#0e1330" : "#f3ead0";
+    g.beginPath(); g.ellipse(cx, cy, Math.abs(k) * r, r, 0, -Math.PI / 2, Math.PI / 2, k > 0); g.fill();
+    g.restore();
+    g.strokeStyle = "rgba(230,225,255,0.3)"; g.lineWidth = 1; g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.stroke();
+  }
+
+  // ---------- seasonal (solar) mini: Earth around the Sun, three Indian seasons ----------
+  const SEASON_ARCS = [
+    { name: "Winter", from: 0, to: 90, color: "#7fb2ff" },      // ~Dec-Feb
+    { name: "Summer", from: 90, to: 195, color: "#ffb15e" },    // ~Mar-Jun
+    { name: "Monsoon", from: 195, to: 360, color: "#57c98a" },  // ~Jun-Nov
+  ];
+  function drawSeasonMini(jd) {
+    const seasonCv = $("season-mini");
+    if (!seasonCv) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const size = seasonCv.clientWidth || 34;
+    if (seasonCv.width !== size * dpr) { seasonCv.width = size * dpr; seasonCv.height = size * dpr; }
+    const g = seasonCv.getContext("2d");
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, size, size);
+    const cx = size / 2, cy = size / 2, rOrbit = size * 0.4, rSun = size * 0.09, rEarth = size * 0.055;
+    // day-of-year angle, 0 at the winter-solstice boundary used above
+    const c = A.jdToCalendar(jd);
+    const startOfYear = A.calendarToJd(c.year <= 0 ? c.year + 1 : c.year, 1, 1);
+    const doy = jd - startOfYear;
+    const angle = (doy / 365.2425) * 360;
+    const toXY = (deg, r) => [cx + r * Math.cos((deg - 90) * D2R), cy + r * Math.sin((deg - 90) * D2R)];
+    for (const s of SEASON_ARCS) {
+      g.strokeStyle = s.color; g.lineWidth = size * 0.09; g.lineCap = "butt";
+      g.beginPath(); g.arc(cx, cy, rOrbit, (s.from - 90) * D2R, (s.to - 90) * D2R); g.stroke();
+    }
+    g.fillStyle = "#ffd76a"; g.beginPath(); g.arc(cx, cy, rSun, 0, TAU); g.fill();
+    const [ex, ey] = toXY(angle, rOrbit);
+    // Earth as a small lit/shadow disc, shadow always facing away from the Sun
+    g.save(); g.beginPath(); g.arc(ex, ey, rEarth, 0, TAU); g.clip();
+    g.fillStyle = "#5aa9ff"; g.fillRect(ex - rEarth, ey - rEarth, rEarth * 2, rEarth * 2);
+    const toSun = Math.atan2(cy - ey, cx - ex);
+    g.fillStyle = "rgba(6,9,32,0.75)";
+    g.beginPath(); g.arc(ex, ey, rEarth, toSun + Math.PI / 2, toSun - Math.PI / 2); g.fill();
+    g.restore();
+  }
+
+  // ---------- sky mini: understated Sun+Moon wheel ----------
+  const skyCv = $("sky-mini");
+  function drawSkyMini(jd) {
+    if (!skyCv) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const size = skyCv.clientWidth || 34;
+    if (skyCv.width !== size * dpr) { skyCv.width = size * dpr; skyCv.height = size * dpr; }
+    const g = skyCv.getContext("2d");
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, size, size);
+    const cx = size / 2, cy = size / 2, r = size * 0.42;
+    g.strokeStyle = "rgba(150,165,240,0.35)"; g.lineWidth = 1; g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.stroke();
+    const pos = A.grahas(jd);
+    const dot = (lon, rr, color, s) => {
+      const x = cx - rr * Math.cos(lon * D2R), y = cy + rr * Math.sin(lon * D2R);
+      g.fillStyle = color; g.beginPath(); g.arc(x, y, s, 0, TAU); g.fill();
+    };
+    for (const [name, color, rr, s] of [
+      ["Shani", "#8fa6ff", r * 0.55, 1.1], ["Guru", "#ffb46b", r * 0.68, 1.3],
+      ["Mangala", "#ff5b4a", r * 0.8, 1], ["Shukra", "#fff0f8", r * 0.9, 1],
+      ["Budha", "#7fe0a0", r * 0.95, 0.9],
+    ]) dot(pos[name], rr, color, s);
+    dot(pos.Surya, r, "#ffc94d", 2.2);
+    dot(pos.Chandra, r * 1.0, "#e9edff", 1.6);
+  }
+
   // ---------- panels ----------
-  const setText = (el, t) => { if (el.textContent !== t) el.textContent = t; };
-  const setHTML = (el, html) => { if (el._html !== html) { el.innerHTML = html; el._html = html; } };
+  const setText = (el, t) => { if (el && el.textContent !== t) el.textContent = t; };
+  const setHTML = (el, html) => { if (el && el._html !== html) { el.innerHTML = html; el._html = html; } };
+
+  function calendarRow(cal, jd, astroYear) {
+    const f = cal.full(jd), on = inUse(cal, astroYear);
+    return `<div class="cal${on ? "" : " pro"}" title="${esc(cal.history)}"><div class="nm">${esc(cal.name)}<span class="cal-country">${esc(C.COUNTRIES[cal.country])}</span></div><div class="val">${esc(f.text)}${on ? "" : '<span class="tag">not yet in use</span>'}${f.note ? `<div class="note">${esc(f.note)}</div>` : ""}</div></div>`;
+  }
 
   function calendarsHTML(jd) {
     const astroYear = A.jdToCalendar(jd).year;
-    let html = "";
-    for (const k of COUNTRY_ORDER) {
-      const cals = C.CALENDARS.filter((c) => c.country === k);
-      const shown = cals.filter((c) => state.showPro || inUse(c, astroYear));
-      const hidden = cals.length - shown.length;
-      html += `<div class="country${k === "IN" ? " focus" : ""}"><h3><span class="sw" style="background:${countryColor(k)}"></span>${H.countries[k].name}</h3>`;
-      for (const cal of shown) {
-        const f = cal.full(jd), on = inUse(cal, astroYear);
-        html += `<div class="cal${on ? "" : " pro"}" title="${esc(cal.history)}"><div class="nm">${esc(cal.name)}</div><div class="val">${esc(f.text)}${on ? "" : '<span class="tag">not yet in use</span>'}${f.note ? `<div class="note">${esc(f.note)}</div>` : ""}</div></div>`;
+    const visible = C.CALENDARS.filter((c) => state.countries.has(c.country) && (state.showPro || inUse(c, astroYear)));
+    if (state.calGroup === "country") {
+      let html = "";
+      for (const k of COUNTRY_ORDER) {
+        if (!state.countries.has(k)) continue;
+        const cals = C.CALENDARS.filter((c) => c.country === k);
+        const shown = cals.filter((c) => state.showPro || inUse(c, astroYear));
+        const hidden = cals.length - shown.length;
+        if (!shown.length && !hidden) continue;
+        html += `<div class="country${k === "IN" ? " focus" : ""}"><h3><span class="sw" style="background:${countryColor(k)}"></span>${H.countries[k].name}</h3>`;
+        for (const cal of shown) html += calendarRow(cal, jd, astroYear).replace('<span class="cal-country">' + esc(C.COUNTRIES[cal.country]) + "</span>", "");
+        if (hidden) html += `<div class="hidden-count">${hidden === cals.length ? "None of this country's calendars was in use yet." : `${hidden} more not yet in use.`}</div>`;
+        html += "</div>";
       }
-      if (hidden) html += `<div class="hidden-count">${hidden === cals.length ? "None of this country's calendars was in use yet." : `${hidden} more not yet in use.`}</div>`;
+      return html || `<div class="hidden-count">No countries selected.</div>`;
+    }
+    // grouped by type (default): solar / lunisolar / lunar
+    let html = "";
+    for (const grp of GROUP_ORDER) {
+      const cals = visible.filter((c) => CAL_GROUP[c.id] === grp);
+      if (!cals.length) continue;
+      const mini = grp === "solar" ? '<canvas id="season-mini" class="mini-inline" width="34" height="34"></canvas>'
+        : grp === "lunar" ? '<canvas id="moon-mini" class="mini-inline" width="26" height="26"></canvas>' : "";
+      html += `<div class="cal-group"><h3>${mini}${GROUP_LABEL[grp]}</h3>`;
+      for (const cal of cals) html += calendarRow(cal, jd, astroYear);
       html += "</div>";
     }
-    return html;
+    return html || `<div class="hidden-count">No calendars match the current filter.</div>`;
   }
 
   function updatePanels(year) {
     setText($("date"), fmtDate(state.jd));
     setText($("date-sub"), `${state.jd < 2299160.5 ? "Julian" : "Gregorian"} calendar · JD ${state.jd.toFixed(1)}`);
     setHTML($("calendars"), calendarsHTML(state.jd));
+    drawMoonMini(state.jd); drawSeasonMini(state.jd); drawSkyMini(state.jd);
 
     let prev = null, next = null;
     for (const e of events) { if (e.jd <= state.jd + 0.5) prev = e; else { next = e; break; } }
@@ -431,7 +576,8 @@
     if (recent) {
       html += `<div class="ev-title" style="color:${H.kinds[prev.kind].color}">${esc(prev.n)}</div>`
         + `<div class="ev-meta">${prev.when} · ${H.countries[prev.k].name} · ${H.kinds[prev.kind].name}</div>`
-        + `<div class="ev-desc">${esc(prev.d)}</div><div class="ev-cals">${eventChips(prev, state.showPro)}</div>`;
+        + `<div class="ev-desc">${esc(prev.d)}</div><div class="ev-cals">${eventChips(prev, state.showAllCals, state.showPro)}</div>`
+        + `<label class="cal-toggle small"><input type="checkbox" id="show-all-cals-2" ${state.showAllCals ? "checked" : ""}> show correspondence with other calendars</label>`;
     } else {
       html += `<div class="ev-desc">No event in the dataset for this stretch of time.</div>`;
     }
@@ -440,6 +586,12 @@
       html += `<div class="next">Next: ${esc(next.n)}, ${dy < 1 ? `in ${Math.max(1, Math.round(dy * 365))} days` : `in ${Math.round(dy)} years`}<button data-jump="${events.indexOf(next)}">Go</button></div>`;
     }
     setHTML($("event-card"), html);
+    const showAllCals2 = $("show-all-cals-2");
+    if (showAllCals2) showAllCals2.onchange = () => {
+      state.showAllCals = showAllCals2.checked;
+      $("event-card")._html = null;
+      if ($("rows").children.length) renderTable();
+    };
 
     const active = polities.map((p) => ({ p, v: spanIntensity(p.fa, p.ta, year) })).filter((x) => x.v > 0);
     const live = settlements.filter((s) => year >= s.fa && year < s.ta).length;
@@ -450,80 +602,94 @@
   }
 
   (function buildLegend() {
-    $("legend").innerHTML = Object.values(H.kinds).map((k) => `<span><span class="sw" style="border:1.5px solid ${k.color}"></span>${k.name}</span>`).join("")
+    const el = $("legend");
+    if (!el) return;
+    el.innerHTML = Object.values(H.kinds).map((k) => `<span><span class="sw" style="border:1.5px solid ${k.color}"></span>${k.name}</span>`).join("")
       + `<span><span class="sw" style="background:#7dc8ff;border-radius:1px;height:2px;width:14px"></span>River</span><span><span class="sw" style="border-top:1.5px dashed #c8b48c;border-radius:0;height:0;width:14px"></span>Dried-up river</span>`
       + `<span><span class="sw" style="background:#ff9d3d"></span>Settlement</span><span><span class="sw" style="border:1px solid #aab4d7"></span>Abandoned</span><span>▲ Peak</span>`;
   })();
 
   // ---------- table ----------
   function renderTable() {
-    const rows = events.filter((e) => state.countries.has(e.k)).map((e, i) =>
+    const rows = events.filter((e) => state.countries.has(e.k)).map((e) =>
       `<tr data-jump="${events.indexOf(e)}"><td class="when">${e.when}</td>`
       + `<td class="what"><b style="color:${H.kinds[e.kind].color}">${esc(e.n)}</b><div><span class="sw" style="background:${countryColor(e.k)};margin-right:5px"></span>${H.countries[e.k].name} · ${esc(e.d)}</div></td>`
-      + `<td><div class="chips">${eventChips(e, state.showPro) || '<span class="ev-desc" style="color:var(--text-faint)">None of these calendars existed yet.</span>'}</div></td></tr>`);
-    $("rows").innerHTML = rows.join("");
+      + `<td><div class="chips">${eventChips(e, state.showAllCals, state.showPro) || '<span class="ev-desc" style="color:var(--text-faint)">None of these calendars existed yet.</span>'}</div></td></tr>`);
+    const el = $("rows");
+    if (el) el.innerHTML = rows.join("");
   }
   (function buildFilters() {
-    $("filters").innerHTML = COUNTRY_ORDER.map((k) => `<button data-k="${k}" aria-pressed="true"><span class="sw" style="background:${countryColor(k)};margin-right:6px"></span>${H.countries[k].name}</button>`).join("");
-    for (const b of $("filters").children) {
-      b.onclick = () => {
-        const k = b.dataset.k;
-        state.countries.has(k) ? state.countries.delete(k) : state.countries.add(k);
-        b.setAttribute("aria-pressed", String(state.countries.has(k)));
-        renderTable();
-      };
-    }
+    const mk = (container, onToggle) => {
+      const el = $(container);
+      if (!el) return;
+      el.innerHTML = COUNTRY_ORDER.map((k) => `<button data-k="${k}" aria-pressed="true"><span class="sw" style="background:${countryColor(k)};margin-right:6px"></span>${H.countries[k].name}</button>`).join("");
+      for (const b of el.children) {
+        b.onclick = () => {
+          const k = b.dataset.k;
+          state.countries.has(k) ? state.countries.delete(k) : state.countries.add(k);
+          for (const other of document.querySelectorAll(`[data-k="${k}"]`)) other.setAttribute("aria-pressed", String(state.countries.has(k)));
+          onToggle();
+        };
+      }
+    };
+    mk("filters", renderTable);
+    mk("cal-filters", () => { $("calendars")._html = null; });
   })();
-  $("table-section").addEventListener("toggle", () => { if ($("table-section").open && !$("rows").children.length) renderTable(); });
-  $("rows").addEventListener("click", (e) => { const tr = e.target.closest("[data-jump]"); if (tr) { jumpTo(+tr.dataset.jump); window.scrollTo({ top: 0, behavior: "smooth" }); } });
+  const tableSection = $("table-section");
+  if (tableSection) tableSection.addEventListener("toggle", () => { if (tableSection.open && !$("rows").children.length) renderTable(); });
+  if ($("rows")) $("rows").addEventListener("click", (e) => { const tr = e.target.closest("[data-jump]"); if (tr) { jumpTo(+tr.dataset.jump); window.scrollTo({ top: 0, behavior: "smooth" }); } });
 
   // ---------- controls ----------
   const playBtn = $("play");
   function setPlaying(p) {
     state.playing = p;
-    playBtn.textContent = p ? "❚❚ Pause" : "▶ Play";
-    playBtn.setAttribute("aria-label", p ? "Pause" : "Play");
+    if (playBtn) { playBtn.textContent = p ? "❚❚ Pause" : "▶ Play"; playBtn.setAttribute("aria-label", p ? "Pause" : "Play"); }
   }
-  playBtn.onclick = () => { if (!state.playing && state.jd >= JD_MAX) setJd(JD_MIN); setPlaying(!state.playing); };
+  if (playBtn) playBtn.onclick = () => { if (!state.playing && state.jd >= JD_MAX) setJd(JD_MIN); setPlaying(!state.playing); };
   const stepDays = () => (SPEEDS[state.speed].auto ? 365.2425 : SPEEDS[state.speed].d);
-  $("step-back").onclick = () => setJd(state.jd - stepDays());
-  $("step-fwd").onclick = () => setJd(state.jd + stepDays());
-  SPEEDS.forEach((s, i) => {
-    const b = document.createElement("button");
-    b.textContent = s.label; b.dataset.i = i;
-    b.onclick = () => { state.speed = i; syncSpeeds(); };
-    $("speeds").appendChild(b);
-  });
-  function syncSpeeds() { for (const b of $("speeds").children) b.setAttribute("aria-pressed", String(+b.dataset.i === state.speed)); }
+  if ($("step-back")) $("step-back").onclick = () => setJd(state.jd - stepDays());
+  if ($("step-fwd")) $("step-fwd").onclick = () => setJd(state.jd + stepDays());
+  if ($("speeds")) {
+    SPEEDS.forEach((s, i) => {
+      const b = document.createElement("button");
+      b.textContent = s.label; b.dataset.i = i;
+      b.onclick = () => { state.speed = i; syncSpeeds(); };
+      $("speeds").appendChild(b);
+    });
+  }
+  function syncSpeeds() { if ($("speeds")) for (const b of $("speeds").children) b.setAttribute("aria-pressed", String(+b.dataset.i === state.speed)); }
   syncSpeeds();
-  $("jump").innerHTML = `<option value="">Jump to an event…</option>` + events.map((e, i) => `<option value="${i}">${e.when} — ${esc(e.n)}</option>`).join("");
+  if ($("jump")) $("jump").innerHTML = `<option value="">Jump to an event…</option>` + events.map((e, i) => `<option value="${i}">${e.when} — ${esc(e.n)}</option>`).join("");
   function jumpTo(i) {
     const e = events[i]; if (!e) return;
     setJd(e.jd); setPlaying(false);
     if (e.exact) state.speed = 1;
     syncSpeeds();
   }
-  $("jump").onchange = () => { jumpTo(+$("jump").value); $("jump").value = ""; };
-  $("event-card").addEventListener("click", (ev) => { const b = ev.target.closest("[data-jump]"); if (b) jumpTo(+b.dataset.jump); });
-  $("show-pro").onchange = () => { state.showPro = $("show-pro").checked; if ($("rows").children.length) renderTable(); };
-  for (const b of $("views").children) {
-    b.onclick = () => {
-      state.view = b.dataset.view;
-      for (const o of $("views").children) o.setAttribute("aria-pressed", String(o === b));
-      buildMap();
-    };
+  if ($("jump")) $("jump").onchange = () => { jumpTo(+$("jump").value); $("jump").value = ""; };
+  if ($("event-card")) $("event-card").addEventListener("click", (ev) => { const b = ev.target.closest("[data-jump]"); if (b) jumpTo(+b.dataset.jump); });
+  if ($("show-pro")) $("show-pro").onchange = () => { state.showPro = $("show-pro").checked; $("calendars")._html = null; if ($("rows").children.length) renderTable(); };
+  if ($("cal-mode")) $("cal-mode").onchange = () => { state.calGroup = $("cal-mode").value; $("calendars")._html = null; };
+  if ($("views")) {
+    for (const b of $("views").children) {
+      b.onclick = () => {
+        state.view = b.dataset.view;
+        for (const o of $("views").children) o.setAttribute("aria-pressed", String(o === b));
+        buildMap();
+      };
+    }
   }
   document.addEventListener("keydown", (e) => {
     if (["SELECT", "INPUT", "SUMMARY"].includes(e.target.tagName)) return;
-    if (e.code === "Space") { e.preventDefault(); playBtn.click(); }
-    else if (e.key === "ArrowRight") { e.preventDefault(); $("step-fwd").click(); }
-    else if (e.key === "ArrowLeft") { e.preventDefault(); $("step-back").click(); }
+    if (e.code === "Space") { e.preventDefault(); playBtn?.click(); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); $("step-fwd")?.click(); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); $("step-back")?.click(); }
   });
 
   // timeline scrub + hover, map hover
   const tip = $("tip");
-  const showTip = (e, html) => { tip.innerHTML = html; tip.style.display = "block"; tip.style.left = Math.min(e.clientX + 14, window.innerWidth - 290) + "px"; tip.style.top = e.clientY + 14 + "px"; };
-  const hideTip = () => { tip.style.display = "none"; };
+  const showTip = (e, html) => { if (!tip) return; tip.innerHTML = html; tip.style.display = "block"; tip.style.left = Math.min(e.clientX + 14, window.innerWidth - 290) + "px"; tip.style.top = e.clientY + 14 + "px"; };
+  const hideTip = () => { if (tip) tip.style.display = "none"; };
   {
     let down = false;
     const yearAt = (e) => { const r = tl.cv.getBoundingClientRect(); return tToYear(clamp((e.clientX - r.left - tl.gutter) / (tl.w - tl.gutter - tl.right), 0, 1)); };
@@ -554,6 +720,17 @@
         parts.push(`<b style="color:${countryColor(s.k)}">${esc(s.n)}</b>${year >= s.ta ? " (abandoned)" : ""}<div class="m">${s.c ? "c. " : ""}${histLabel(s.fa)}${s.t == null ? "" : ` – ${histLabel(s.ta)}`}</div><div>${esc(s.d)}</div>`);
       }
     }
+    if (map.rivers && map.proj) {
+      const seen = new Set();
+      for (const f of map.rivers) {
+        const name = f.properties.name_en || f.properties.name;
+        if (!name || seen.has(name)) continue;
+        const lines = f.geometry.type === "MultiLineString" ? f.geometry.coordinates : [f.geometry.coordinates];
+        if (lines.some((l) => l.some((c) => { const [x, y] = map.proj(c); return Math.hypot(x - mx, y - my) < 6; }))) {
+          seen.add(name); parts.push(`<div><b style="color:#7dc8ff">${esc(name)}</b> <span class="m">river</span></div>`);
+        }
+      }
+    }
     for (const rv of paleoRivers) {
       if (rv.px.some(([x, y]) => Math.hypot(x - mx, y - my) < 8)) parts.push(`<b style="color:#7dc8ff">${esc(rv.n)}</b> <span class="m">${year < rv.ta ? "flowing" : "dry bed"}</span><div>${esc(rv.d)}</div>`);
     }
@@ -572,9 +749,11 @@
   // ---------- loop ----------
   function buildAll() { buildMap(); buildTimeline(); }
   let resizeTimer = 0;
-  window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(buildAll, 120); });
-  let last = performance.now(), lastPanel = 0;
+  const onResize = () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(buildAll, 120); };
+  window.addEventListener("resize", onResize);
+  let last = performance.now(), lastPanel = 0, rafId = 0, stopped = false;
   function frame(now) {
+    if (stopped) return;
     const dt = Math.min(0.1, (now - last) / 1000); last = now;
     if (state.playing) {
       setJd(state.jd + daysPerSecond() * dt);
@@ -583,14 +762,13 @@
     const year = A.jdToYearFloat(state.jd);
     drawMap(year);
     drawTimeline(year);
-    if (now - lastPanel > 200) { updatePanels(year); lastPanel = now; }
-    requestAnimationFrame(frame);
+    if (now - lastPanel > 90) { updatePanels(year); lastPanel = now; }
+    rafId = requestAnimationFrame(frame);
   }
   buildAll();
   setPlaying(state.playing);
-  requestAnimationFrame(frame);
+  rafId = requestAnimationFrame(frame);
 
-  // Natural Earth 1:50m river centrelines, kept to the region
   fetch("https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_50m_rivers_lake_centerlines.geojson")
     .then((r) => r.json())
     .then((fc) => {
@@ -603,12 +781,9 @@
     })
     .catch((err) => console.warn("rivers unavailable", err));
 
-  // Country outlines as on the Government of India's official map (Natural
-  // Earth's India worldview; see scripts/build_hkh_boundaries.py).
   fetch("boundaries_ind.json")
     .then((r) => r.json())
     .then((fc) => {
-      // d3-geo wants clockwise outer rings; flip any polygon that would otherwise cover the globe
       if (window.d3 && d3.geoArea) {
         for (const f of fc.features) {
           f.geometry.coordinates = f.geometry.coordinates.map((poly) => {
@@ -621,4 +796,10 @@
     })
     .catch((err) => console.warn("country outlines unavailable", err));
   document.fonts && document.fonts.ready.then(buildMap);
-})();
+
+  return function unmount() {
+    stopped = true;
+    cancelAnimationFrame(rafId);
+    window.removeEventListener("resize", onResize);
+  };
+}

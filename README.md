@@ -37,14 +37,22 @@ today ([all demos](https://rahulbhargavain.github.io/starcharts/)).
    `/cosmic_timeline/` to run it locally.
 7. **Hindu Kush Himalaya calendar timeline**
    ([live](https://rahulbhargavain.github.io/starcharts/hkh_timeline/),
-   source in `demo/hkh_timeline/`) — settlements, states and events from
-   Afghanistan to Myanmar, 7000 BCE to today, with India in focus, dated
-   in the calendars of the eight ICIMOD member countries (Vikram Samvat,
+   built output in `demo/hkh_timeline/`, source in `app/hkh-timeline/`) —
+   settlements, states and events from Afghanistan to Myanmar, 7000 BCE to
+   today, with India in focus, dated in the calendars of the eight ICIMOD
+   member countries, grouped as solar, lunisolar and lunar (Vikram Samvat,
    Shaka, Saptarishi, Bikram Sambat, Nepal Sambat, Bangla, Hijri, Solar
    Hijri, Chinese, Tibetan/Bhutanese, Myanmar Era). Each calendar is
-   flagged when a date predates its use. The lunisolar months and tithis
-   are checked against `masa.py`/`panchanga.py`, and each new year against
-   published dates (`tests/test_hkh_calendars.py`).
+   flagged when a date predates its use, and an event shows only its own
+   country's calendar by default (with an option to see every calendar's
+   correspondence). The lunisolar months and tithis are checked against
+   `masa.py`/`panchanga.py`, and each new year against published dates
+   (`tests/test_hkh_calendars.py`). Built with Vite + React; `calendars.js`,
+   `history.js`, `boundaries_ind.json` and the map/timeline rendering are
+   plain JS shared with the Python tests (see
+   `app/hkh-timeline/src/lib/engine.js`) — rebuild with
+   `cd app/hkh-timeline && npm install && npm run build`, which writes
+   straight into `demo/hkh_timeline/` alongside those shared files.
 
 ## Setup
 

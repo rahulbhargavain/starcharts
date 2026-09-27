@@ -29,6 +29,19 @@ ruff check .
 - **Reporting**: `report.py`, `chart.py`, `visualize.py` (North-Indian kundali SVG).
 - **Texts**: `texts/ramayana.py`, `texts/mahabharata.py` — worked constraint sets with their Sanskrit citation checks in the docstrings.
 
+## Demos (`demo/`, published via GitHub Pages)
+
+Static HTML/JS demos, each self-contained. `demo/cosmic_timeline/` (sidereal
+sky + civilizations) is plain JS. `demo/hkh_timeline/` (Hindu Kush Himalaya
+calendar timeline) is a Vite+React app built from `app/hkh-timeline/` --
+**after editing `app/hkh-timeline/src/`, rebuild with
+`cd app/hkh-timeline && npm install && npm run build`** (writes straight into
+`demo/hkh_timeline/`, alongside `calendars.js`/`history.js`/
+`boundaries_ind.json`, which are the actual source of truth those tests read
+and must stay at that exact path -- see `app/hkh-timeline/vite.config.js`).
+Don't hand-edit `demo/hkh_timeline/assets/*.js` or its `index.html`; they're
+build output and get overwritten.
+
 ## Conventions that matter
 
 - **swisseph state is per thread** (it's built with thread-local storage). Route every swisseph computation through `ephemeris.ensure_thread_ready()` (the `_calc` helper does) so the data-file path is set in the calling thread, and set the sidereal mode immediately before each sidereal computation.

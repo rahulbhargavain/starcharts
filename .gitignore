@@ -18,3 +18,10 @@ htmlcov/
 # Swiss Ephemeris data files (.se1): binary, fetched on demand by
 # ephe/download.sh, not committed -- see ephe/README.md.
 ephe/*.se1
+
+# Vite+React app sources (app/*/): node_modules and local Vite cache aren't
+# committed. Their `npm run build` output IS committed, though, straight into
+# the matching demo/ folder -- see each app's vite.config.js.
+app/*/node_modules/
+app/*/.vite/
+node_modules/
