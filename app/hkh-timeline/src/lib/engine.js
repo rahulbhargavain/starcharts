@@ -503,16 +503,16 @@ export function mountEngine() {
     const g = skyCv.getContext("2d");
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, size, size);
-    const cx = size / 2, cy = size / 2, r = size * 0.34, rBand = size * 0.44;
+    const cx = size / 2, cy = size / 2, r = size * 0.34, rBand = size * 0.4;
     const lonXY = (lon, rr) => [cx - rr * Math.cos(lon * D2R), cy + rr * Math.sin(lon * D2R)];
-    // seasons: a band just outside the planet ring, sampled as a polyline so
-    // there's no ambiguity about which way canvas angles vs. sidereal
-    // longitude run
+    // seasons: a thin, understated band just outside the planet ring,
+    // sampled as a polyline so there's no ambiguity about which way canvas
+    // angles vs. sidereal longitude run
     const ayan = A.ayanamsha(jd);
     g.lineCap = "butt";
     for (const s of SEASON_BANDS) {
       const lon0 = A.norm(s.t0 - ayan), span = A.norm(s.t1 - s.t0);
-      g.strokeStyle = s.color; g.lineWidth = Math.max(2, size * 0.05);
+      g.strokeStyle = rgba(s.color, 0.55); g.lineWidth = Math.max(1.5, size * 0.018);
       g.beginPath();
       const steps = Math.max(2, Math.round(span / 12));
       for (let i = 0; i <= steps; i++) {

@@ -24,7 +24,7 @@ h1{font:600 clamp(26px,3.4vw,36px) var(--serif);margin:0;letter-spacing:.01em;}
    canvas-resize feedback loop described at #moon-mini below, because
    clientWidth is then governed by the CSS, not by the width attribute
    engine.js keeps changing. */
-#sky-mini{width:100%;min-height:180px;aspect-ratio:1/1;display:block;margin-bottom:10px;}
+#sky-mini{width:100%;max-width:240px;min-height:140px;aspect-ratio:1/1;display:block;margin-bottom:10px;}
 .moon-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
 #moon-label{font-size:13px;color:var(--text-dim);}
 .grid{display:grid;grid-template-columns:minmax(300px,440px) 1fr;gap:14px;}
