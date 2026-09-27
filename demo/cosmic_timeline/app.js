@@ -722,7 +722,7 @@
 
   function updatePanels(pos, year) {
     setText($("date"), fmtDate(state.jd));
-    setText($("date-sub"), `${state.jd < 2299160.5 ? "Julian" : "Gregorian"} calendar · JD ${state.jd.toFixed(1)}`);
+    setText($("date-sub"), `${state.jd < 2299160.5 ? "Julian" : "Gregorian"} calendar · Julian day number ${state.jd.toFixed(1)}`);
 
     const plus = A.grahas(state.jd + 0.5), minus = A.grahas(state.jd - 0.5);
     for (const k of TABLE_ORDER) {

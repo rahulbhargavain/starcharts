@@ -527,7 +527,7 @@ export function mountEngine() {
 
   function updatePanels(year) {
     setText($("date"), fmtDate(state.jd));
-    setText($("date-sub"), `${state.jd < 2299160.5 ? "Julian" : "Gregorian"} calendar · JD ${state.jd.toFixed(1)}`);
+    setText($("date-sub"), `${state.jd < 2299160.5 ? "Julian" : "Gregorian"} calendar · Julian day number ${state.jd.toFixed(1)}`);
     setHTML($("calendars"), calendarsHTML(state.jd));
 
     let prev = null, next = null;
