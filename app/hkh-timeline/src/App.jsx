@@ -26,13 +26,8 @@ export default function App() {
           <div id="date">—</div>
           <div id="date-sub">—</div>
           <canvas
-            id="sky-mini" role="img"
-            aria-label="The sidereal sky right now: Sun, Moon and the five visible planets, with the three Indian seasons banded around the ring"
-          />
-          <div className="legend" id="sky-legend" />
-          <canvas
-            id="moon-mini" role="img"
-            aria-label="The Sun at centre, Earth orbiting it through the year, and the Moon orbiting Earth, showing its current phase; the three Indian seasons colour Earth's orbit"
+            id="moon-mini" role="img" tabIndex={0}
+            aria-label="The Sun at centre, Earth orbiting it through the year on a labelled month band with a season ring alongside, and the Moon orbiting Earth showing its current phase; Mercury, Venus, Mars, Jupiter and Saturn at their real (compressed-scale) distances with short motion trails, and the asteroid belt as a faint scattered ring beyond Mars. Drag to tilt the view."
           />
           <div id="moon-label" className="moon-label">—</div>
           <div className="card" id="event-card" />
@@ -128,9 +123,9 @@ export default function App() {
           follow later rules than were in force at the time. By default, an event shows only its own country's
           calendar (alongside the Julian/Gregorian date already given) — tick "show correspondence with other
           calendars" on an event to see how every calendar in use at the time read that same day. The season band
-          around the sky wheel is drawn at fixed points in the tropical (Sun-relative) year, shifted into the
-          sidereal frame by the same precessing ayanamsha as everything else here, so it slowly rotates through the
-          ring over the centuries.
+          around Earth's orbit is drawn at fixed points in the tropical (Sun-relative) year. The map's monsoon and
+          snow overlays are a schematic seasonal estimate -- a smooth window of typical reach and timing -- not a
+          reconstruction of any specific year's weather.
         </p>
         <p>
           <b>Dates and places.</b> Dates marked c. are approximate or traditional. Terrain is NASA's Blue Marble
