@@ -52,7 +52,6 @@ export default function App() {
             <div className="map-controls">
               <div className="seg" id="map-overlays" role="group" aria-label="Map overlays">
                 <button data-overlay="climate" aria-pressed="true" title="Paleoclimate drought & pluvial reconstruction (MADA 1300–2005 CE)">Drought</button>
-                <button data-overlay="seasonal" aria-pressed="true" title="Schematic seasonal monsoon & winter snow">Monsoon</button>
               </div>
               <div className="seg" id="views" role="group" aria-label="Map extent">
                 <button data-view="india" aria-pressed="false">Indian Himalaya</button>
@@ -140,9 +139,8 @@ export default function App() {
           follow later rules than were in force at the time. By default, an event shows only its own country's
           calendar (alongside the Julian/Gregorian date already given) — tick "show correspondence with other
           calendars" on an event to see how every calendar in use at the time read that same day. The season band
-          around Earth's orbit is drawn at fixed points in the tropical (Sun-relative) year. The map's monsoon and
-          snow overlays are a schematic seasonal estimate -- a smooth window of typical reach and timing -- not a
-          reconstruction of any specific year's weather.
+          around Earth's orbit is drawn at fixed points in the tropical (Sun-relative) year. The map's Drought
+          overlay is a reconstruction of actual past conditions (MADA, see below), not a seasonal schematic.
         </p>
         <p>
           <b>Dates and places.</b> Dates marked c. are approximate or traditional. Terrain is NASA's Blue Marble

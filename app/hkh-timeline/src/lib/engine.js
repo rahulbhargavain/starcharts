@@ -127,7 +127,7 @@ export function mountEngine() {
   const state = {
     jd: JD_MIN, playing: true, speed: 2, view: "hkh", showPro: false, showAllCals: false,
     calGroup: "type", countries: new Set(COUNTRY_ORDER),
-    overlays: { climate: true, seasonal: true },
+    overlays: { climate: true },
     // Sky mini: same perspective model as the Cosmic Timeline's heliocentric
     // views -- "sun" is top-down, "iso" is tiltable by dragging. zoomAU is
     // continuous (mouse-wheel/pinch); the Inner/Full buttons just jump it to
@@ -281,43 +281,6 @@ export function mountEngine() {
 
   const eventWindowYears = () => Math.max(1.5, (daysPerSecond() / 365.2425) * 3);
 
-  // ---------- seasonal overlays: monsoon rains and Himalayan snow ----------
-  // Schematic estimates, not a reconstruction of any specific year's weather:
-  // a smooth window of typical reach and timing (day-of-year, read off the
-  // same fractional "year" already used for everything else here) over a
-  // handful of fixed zones -- the South Asian summer monsoon's usual extent,
-  // and where winter snow lies deepest along the high mountain arc.
-  const MONSOON_ZONES = [ // [lon, lat, radius in degrees]
-    [88.5, 24.5, 6.5], [91.8, 25.5, 5], [80, 24, 7.5], [73.5, 16.5, 5], [96, 19, 5.5], [78.5, 30, 4],
-  ];
-  const SNOW_ZONES = [
-    [86.9, 28.0, 2.4], [76.5, 35.9, 3], [71.8, 36.2, 2.2], [74.8, 38.6, 2.6], [95.2, 29.6, 2], [80.2, 30.7, 2.4],
-  ];
-  function seasonWindow(doy, peakDoy, halfWidth) {
-    let d = Math.abs(doy - peakDoy); d = Math.min(d, 365.2425 - d);
-    return d > halfWidth ? 0 : smooth(1 - d / halfWidth);
-  }
-  function drawSeasonalOverlay(ctx, year) {
-    const doy = (year - Math.floor(year)) * 365.2425;
-    const monsoon = seasonWindow(doy, 205, 80); // mid-July, roughly Jun-Sep
-    const snow = seasonWindow(doy, 15, 80); // mid-Jan, roughly Nov-Mar
-    if (monsoon < 0.02 && snow < 0.02) return;
-    const pxPerDeg = (lon, lat) => { const a = map.proj([lon, lat - 0.5]), b = map.proj([lon, lat + 0.5]); return Math.hypot(b[0] - a[0], b[1] - a[1]); };
-    const blobs = (ctx, zones, amt, color, op) => {
-      if (amt < 0.02) return;
-      ctx.save(); ctx.globalCompositeOperation = op;
-      for (const [lon, lat, rDeg] of zones) {
-        const [x, y] = map.proj([lon, lat]), r = rDeg * pxPerDeg(lon, lat);
-        const gr = ctx.createRadialGradient(x, y, 0, x, y, r);
-        gr.addColorStop(0, rgba(color, 0.4 * amt)); gr.addColorStop(0.55, rgba(color, 0.16 * amt)); gr.addColorStop(1, rgba(color, 0));
-        ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
-      }
-      ctx.restore();
-    };
-    blobs(ctx, MONSOON_ZONES, monsoon, "#3fae7a", "lighter");
-    blobs(ctx, SNOW_ZONES, snow, "#eaf3ff", "screen");
-  }
-
   let madaData = null;
   function drawPaleoclimate(ctx, year) {
     if (!madaData || !madaData.points) return;
@@ -352,7 +315,6 @@ export function mountEngine() {
     const { ctx, w, h, fs } = map;
     ctx.clearRect(0, 0, w, h);
     blit(ctx, map.base);
-    if (state.overlays.seasonal) drawSeasonalOverlay(ctx, year);
     if (state.overlays.climate) drawPaleoclimate(ctx, year);
     ctx.save(); ctx.globalCompositeOperation = "lighter";
     const labels = [];
@@ -965,7 +927,6 @@ export function mountEngine() {
     el.innerHTML = Object.values(H.kinds).map((k) => `<span><span class="sw" style="border:1.5px solid ${k.color}"></span>${k.name}</span>`).join("")
       + `<span><span class="sw" style="background:#7dc8ff;border-radius:1px;height:2px;width:14px"></span>River</span><span><span class="sw" style="border-top:1.5px dashed #c8b48c;border-radius:0;height:0;width:14px"></span>Dried-up river</span>`
       + `<span><span class="sw" style="background:#ff9d3d"></span>Settlement</span><span><span class="sw" style="border:1px solid #aab4d7"></span>Abandoned</span><span>▲ Mountain peak</span>`
-      + `<span><span class="sw" style="background:#3fae7a"></span>Monsoon (schematic)</span><span><span class="sw" style="background:#eaf3ff"></span>Winter snow (schematic)</span>`
       + `<span><span class="sw" style="background:#cc5030"></span>Drought (MADA, 1300–2005)</span><span><span class="sw" style="background:#3088cc"></span>Pluvial (MADA)</span>`;
   })();
 
