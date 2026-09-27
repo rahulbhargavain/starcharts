@@ -154,6 +154,15 @@
     return siderealAtTT(jdUt + deltaTDays(jdUt));
   }
 
+  /** Sidereal (Lahiri) Sun and Moon only: the cheap path for calendar work. */
+  function sunMoon(jdUt) {
+    const T = (jdUt + deltaTDays(jdUt) - J2000) / 36525;
+    return {
+      sun: norm(lonOf(helio("Earth", T)) + 180 - LAHIRI_J2000),
+      moon: norm(moonTropical(T) - precession(T) - LAHIRI_J2000),
+    };
+  }
+
   const HELIO_BODIES = ["Budha", "Shukra", "Earth", "Mangala", "Guru", "Shani"];
 
   /** Sun-centred positions (AU) in the sidereal ecliptic frame: x toward 0° Mesha, z to ecliptic north. */
@@ -218,7 +227,7 @@
   }
 
   const api = {
-    GRAHA_ORDER, HELIO_BODIES, LAHIRI_J2000, grahas, heliocentric, orbit, ayanamsha, deltaTDays,
+    GRAHA_ORDER, HELIO_BODIES, LAHIRI_J2000, grahas, sunMoon, heliocentric, orbit, ayanamsha, deltaTDays,
     jdToCalendar, calendarToJd, historicalToJd, jdToYearFloat, yearFloatToJd, norm,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;

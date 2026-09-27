@@ -35,6 +35,16 @@ today ([all demos](https://rahulbhargavain.github.io/starcharts/)).
    `tests/test_cosmic_timeline_astro.py`). Serve it with
    `python -m http.server --directory demo` and open
    `/cosmic_timeline/` to run it locally.
+7. **Hindu Kush Himalaya calendar timeline**
+   ([live](https://rahulbhargavain.github.io/starcharts/hkh_timeline/),
+   source in `demo/hkh_timeline/`) — settlements, states and events from
+   Afghanistan to Myanmar, 7000 BCE to today, with India in focus, dated
+   in the calendars of the eight ICIMOD member countries (Vikram Samvat,
+   Shaka, Saptarishi, Bikram Sambat, Nepal Sambat, Bangla, Hijri, Solar
+   Hijri, Chinese, Tibetan/Bhutanese, Myanmar Era). Each calendar is
+   flagged when a date predates its use. The lunisolar months and tithis
+   are checked against `masa.py`/`panchanga.py`, and each new year against
+   published dates (`tests/test_hkh_calendars.py`).
 
 ## Setup
 
