@@ -608,12 +608,12 @@ export function mountEngine() {
   // planets' orbits entirely.
   const REAL_RADIUS_KM = { Budha: 2439.7, Shukra: 6051.8, Earth: 6371, Mangala: 3389.5, Guru: 69911, Shani: 58232 };
   const HELIO = {
-    Budha: { color: "#7fe0a0", mm: 4.09 },
-    Shukra: { color: "#fff0f8", mm: 1.6 },
-    Earth: { color: "#8fc4ff", mm: 0.986 },
-    Mangala: { color: "#ff5b4a", mm: 0.524 },
-    Guru: { color: "#ffb46b", mm: 0.0831 },
-    Shani: { color: "#8fa6ff", mm: 0.0335 },
+    Budha: { color: "#7fe0a0", mm: 4.09, abbr: "Me" },
+    Shukra: { color: "#fff0f8", mm: 1.6, abbr: "Ve" },
+    Earth: { color: "#8fc4ff", mm: 0.986, abbr: "Earth" },
+    Mangala: { color: "#ff5b4a", mm: 0.524, abbr: "Ma" },
+    Guru: { color: "#ffb46b", mm: 0.0831, abbr: "Ju" },
+    Shani: { color: "#8fa6ff", mm: 0.0335, abbr: "Sa" },
   };
   for (const name of Object.keys(HELIO)) HELIO[name].sizeFrac = 0.021 * Math.sqrt(REAL_RADIUS_KM[name] / REAL_RADIUS_KM.Earth);
   const ISO_Z_EXAGGERATION = 4;
@@ -792,7 +792,7 @@ export function mountEngine() {
       g.font = `500 ${Math.max(8, size * 0.022)}px "IBM Plex Mono"`;
       g.fillStyle = rgba(st.color, 0.95);
       g.textAlign = "center";
-      g.fillText(st.abbr || b.name.substring(0, 2), x, y - s - 9);
+      g.fillText(st.abbr, x, y - s - 9);
       if (b.name === "Earth") {
         const ex = b.p[0] * k, ey = b.p[1] * k, mr = 13 * scale;
         const [mx, my] = P(ex + mr * Math.cos(pos.Chandra * D2R), ey + mr * Math.sin(pos.Chandra * D2R), 0);

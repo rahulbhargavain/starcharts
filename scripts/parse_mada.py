@@ -10,9 +10,7 @@ Produces mada_hkh.json containing:
 """
 
 import os
-import sys
 import json
-import numpy as np
 
 def parse_paleoclimate(
     mada_txt="review/jja-mada.txt",
@@ -96,7 +94,7 @@ def parse_paleoclimate(
     pages2k_payload = None
     if os.path.exists(pages2k_txt):
         with open(pages2k_txt, "r", encoding="utf-8", errors="replace") as f:
-            p2k_lines = [l.strip().split("\t") for l in f if l.strip() and not l.startswith("##")]
+            p2k_lines = [line.strip().split("\t") for line in f if line.strip() and not line.startswith("##")]
         
         # p2k_lines[0] is column headers
         p2k_rows = p2k_lines[1:]
